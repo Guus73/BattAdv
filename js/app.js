@@ -1586,11 +1586,13 @@ async function captureChartsForReport(){
   const out=await cap("chart2");
   const sav=await cap("savingsChart");
   const roi=await cap("roiChart");
+  const heat=await cap("heatmapChart");
 
   if(main) document.getElementById("reportChartMain").src=main;
   if(out) document.getElementById("reportChartOutput").src=out;
   if(sav) document.getElementById("reportChartSavings").src=sav;
   if(roi) document.getElementById("reportChartROI").src=roi;
+  if(heat) document.getElementById("reportChartHeatmap").src=heat;
 }
 
 function generatePdfReport() {

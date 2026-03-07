@@ -1,6 +1,6 @@
 
 window.VERSION = {
-  ui: "2.8.3",
+  ui: "2.8.4",
   simulation: "1.4.0",
   batteryModel: "1.4.0",
   heatmap: "1.2.0",
@@ -11,7 +11,7 @@ window.VERSION = {
 };
 
 window.CHANGELOG = `
-2.8.3
+2.8.4
 - monthly peak-aware optimisation
 - monthly peak tariff cost in hybrid modes
 - monthly peak cost shown in notes
