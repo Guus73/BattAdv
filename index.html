@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Energy UI – ENGIE + batterij sizing + PDF report</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/luxon@3.5.0/build/global/luxon.min.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<header>
+  <h1>Energy UI</h1><div id="versionBox" class="version" title="Show version information">v<span id="uiVersion"></span></div>
+  <div class="hint">ENGIE CSV · export negatief · aggregatie · fixed vs dynamic · batterij sizing · forecast optimisation · PDF report</div>
+</header>
+
+<div class="wrap">
+  <div class="card">
+    <h2>1) Upload verbruik CSV (ENGIE)</h2>
+    <input id="consFile" type="file" accept=".csv,text/csv" />
+    <div class="small" style="margin-top:8px">
+      Ondersteunt o.a. <span class="mono">1-1-2024, 0:00:00</span> en <span class="mono">01-01-2024, 00:00:00</span>.
+    </div>
+
+    <div class="sep"></div>
+
+    <h2>2) Mapping</h2>
+    <div class="row">
+      <div><label>Datum kolom</label><select id="colDate"></select></div>
+      <div><label>Verbruik kolom</label><select id="colValue"></select></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div><label>Type kolom</label><select id="colType"></select></div>
+      <div><label>Tarief kolom</label><select id="colTariff"></select></div>
+    </div>
+
+    <div class="row" style="margin-top:10px">
+      <div>
+        <label>Tijdzone</label>
+        <select id="tz">
+          <option value="Europe/Amsterdam">Europe/Amsterdam</option>
+          <option value="UTC">UTC</option>
+        </select>
+      </div>
+      <div>
+        <label>Aggregatie</label>
+        <select id="agg">
+          <option value="raw">Raw (per uur)</option>
+          <option value="day">Dag</option>
+          <option value="week">Week</option>
+          <option value="month">Maand</option>
+          <option value="year">Jaar</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:10px">
+      <div><label>Van</label><input id="from" type="date" /></div>
+      <div><label>Tot</label><input id="to" type="date" /></div>
+    </div>
+
+    <div class="sep"></div>
+
+    <h2>3) Grafiek</h2>
+    <div class="row">
+      <div>
+        <label>Weergave</label>
+        <div class="small" style="padding:9px 10px;border:1px solid var(--border);border-radius:10px;background:white;color:var(--ink);">
+          Import en export tegelijk — export negatief
+        </div>
+      </div>
+      <div>
+        <label>EAN filter</label>
+        <select id="ean"></select>
+      </div>
+    </div>
+
+    <div class="sep"></div>
+
+    <h2>4) Dynamische prijzen (Energy-Charts) – link + upload JSON</h2>
+    <div class="row">
+      <div>
+        <label>Zone (bzn)</label>
+        <select id="bzn">
+          <option value="NL">NL</option>
+          <option value="BE">BE</option>
+          <option value="DE-LU">DE-LU</option>
+          <option value="FR">FR</option>
+          <option value="DK1">DK1</option>
+          <option value="DK2">DK2</option>
+        </select>
+      </div>
+      <div>
+        <label>Energy-Charts URL</label>
+        <a id="priceUrl" class="linkish mono" href="#" target="_blank" rel="noreferrer">—</a>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:10px">
+      <div><button id="copyUrl">Copy link</button></div>
+      <div><input id="priceFile" type="file" accept=".json,application/json,.txt" /></div>
+    </div>
+
+    <div id="priceInfo" class="small" style="margin-top:8px">
+      Kies Van/Tot + bzn → open link → save JSON → upload JSON.
+    </div>
+
+    <div class="sep"></div>
+
+    <h2>5) Contract + batterij</h2>
+    <div class="row" style="margin-bottom:10px">
+      <div><button id="savePreset" type="button">Save preset</button></div>
+      <div><button id="loadPreset" type="button">Load preset</button><input id="loadPresetFile" type="file" accept=".json,application/json" style="display:none" /></div>
+    </div>
+    <div class="row" style="margin-bottom:10px">
+      <div><input id="presetName" type="text" placeholder="Preset name" /></div>
+      <div><button id="savePresetLocal" type="button">Save to manager</button></div>
+    </div>
+    <div class="small" style="margin-bottom:8px">Preset manager stores multiple presets in this browser.</div>
+    <div id="presetManager" class="presetManager"></div>
+    <div class="row">
+      <div><label>Vast import (€/kWh)</label><input id="fixedPrice" type="number" step="0.001" value="0.30" /></div>
+      <div><label>Vast teruglever (€/kWh)</label><input id="feedInFixed" type="number" step="0.001" value="0.00" /></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div><label>Dynamisch opslag (€/kWh)</label><input id="dynMarkup" type="number" step="0.001" value="0.00" /></div>
+      <div><label>Dynamisch teruglever (€/kWh)</label><input id="feedInDyn" type="number" step="0.001" value="0.00" /></div>
+    </div>
+
+    <div class="row" style="margin-top:10px">
+      <div>
+        <label>Batterij modus</label>
+        <select id="batMode">
+          <option value="self">Zelfconsumptie</option>
+          <option value="arb">Dynamisch arbitrage</option>
+          <option value="peak">Peak shaving optimisation</option>
+          <option value="hybrid_price_peak">Hybrid dynamic price + peak</option>
+          <option value="hybrid_self_peak">Hybrid self consumption + peak</option>
+          <option value="hybrid_true">Hybrid combined optimisation (price + peak)</option>
+        </select>
+      </div>
+      <div><label>Capaciteit (kWh)</label><input id="cap" type="number" step="0.5" value="10" /></div>
+    </div>
+
+    <div class="row" style="margin-top:10px">
+      <div><label>Vermogen (kW)</label><input id="pmax" type="number" step="0.5" value="3" /></div>
+      <div><label>RTE (0–1)</label><input id="rte" type="number" step="0.01" value="0.90" /></div>
+    </div>
+
+    <div class="row" style="margin-top:10px">
+      <div><label>Start SoC (0–1)</label><input id="soc0" type="number" step="0.01" value="0.50" /></div>
+      <div><label>Min SoC (0–1)</label><input id="socMin" type="number" step="0.01" value="0.00" /></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div><label>Battery cycle life</label><input id="cycleLife" type="number" step="100" value="6000" /></div>
+      <div><label>Grid tariff (€/kW/month)</label><input id="gridTariff" type="number" step="0.1" value="10" /></div>
+    </div>
+
+    <div class="checkrow" style="margin-top:10px">
+      <input id="priorityExport" type="checkbox" checked />
+      <label for="priorityExport" style="margin:0;color:var(--ink);font-size:13px;">Prioritize charging from export</label>
+    </div>
+
+    <div class="checkrow" style="margin-top:10px">
+      <input id="optForecast" type="checkbox" />
+      <label for="optForecast" style="margin:0;color:var(--ink);font-size:13px;">Dynamic tariff forecast optimisation</label>
+    </div>
+
+    <div class="row" style="margin-top:10px">
+      <div>
+        <label>Forecast mode</label>
+        <select id="optMode">
+          <option value="full">Volledige periode optimalisatie</option>
+          <option value="window">Rolling window</option>
+        </select>
+      </div>
+      <div><label>Window (uren)</label><input id="optWindowH" type="number" step="1" value="24" /></div>
+    </div>
+
+    <div class="row" style="margin-top:10px">
+      <div><button id="runSim" class="primary" disabled>Bereken kosten + outputgrafiek</button></div>
+      <div><button id="generatePdfBtn" disabled>Generate PDF report</button></div>
+    </div>
+
+    <div class="sep"></div>
+
+    <h2>6) Battery prijsmodel (3 ranges)</h2>
+    <div class="row">
+      <div><label>0–5 kWh (€/kWh)</label><input id="tier1" type="number" step="1" value="900" /></div>
+      <div><label>5–15 kWh (€/kWh)</label><input id="tier2" type="number" step="1" value="700" /></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div><label>&gt;15 kWh (€/kWh)</label><input id="tier3" type="number" step="1" value="550" /></div>
+      <div><label>Install / fixed (€)</label><input id="batFixedCost" type="number" step="10" value="1500" /></div>
+    </div>
+
+    <div class="sep"></div>
+
+    <h2>7) Sweep + automatische sizing</h2>
+    <div class="row">
+      <div><label>Cap sweep max (kWh)</label><input id="sweepMaxCap" type="number" step="1" value="25" /></div>
+      <div><label>Cap step (kWh)</label><input id="sweepStepCap" type="number" step="0.5" value="1" /></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div><label>Power sweep max (kW)</label><input id="sweepMaxKw" type="number" step="0.5" value="6" /></div>
+      <div><label>Power step (kW)</label><input id="sweepStepKw" type="number" step="0.5" value="1" /></div>
+    </div>
+
+    <div class="row" style="margin-top:10px">
+      <div>
+        <label>Recommendation objective</label>
+        <select id="autoObj">
+          <option value="roi_dyn">Best ROI (dynamic)</option>
+          <option value="roi_fix">Best ROI (fixed)</option>
+          <option value="save_dyn">Max savings (dynamic)</option>
+          <option value="save_fix">Max savings (fixed)</option>
+          <option value="knee">Best value for money (knee point)</option>
+          <option value="peak">Min grid tariff cost</option>
+        </select>
+      </div>
+      <div>
+        <label>ROI scale</label>
+        <select id="roiScale">
+          <option value="auto">Scale to year</option>
+          <option value="none">Keep selected period</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:10px">
+      <div><button id="runSweep" class="primary" disabled>Run sweep + recommended</button></div>
+      <div><button id="applyRecommended" disabled>Use recommended</button></div>
+    </div>
+
+    <div class="progressWrap">
+      <div class="progress"><div id="progressBar" class="progressBar"></div></div>
+      <div id="progressText" class="small"></div>
+    </div>
+
+    <div id="sweepInfo" class="small" style="margin-top:8px"></div>
+  </div>
+
+  <div class="card">
+    <h2>Grafiek (export negatief)</h2>
+    <div class="kpi">
+      <div class="box"><div class="v" id="kpiEnergy">—</div><div class="l">Som serie (kWh)</div></div>
+      <div class="box"><div class="v" id="kpiPeak">—</div><div class="l">Piek (kW ≈ kWh/u)</div></div>
+      <div class="box"><div class="v" id="kpiCycles">—</div><div class="l">Battery cycles</div></div>
+      <div class="box"><div class="v" id="kpiCyclesYear">—</div><div class="l">Cycles per year</div></div>
+      <div class="box"><div class="v" id="kpiLifetime">—</div><div class="l">Battery lifetime</div></div>
+      <div class="box"><div class="v" id="kpiPeakReduction">—</div><div class="l">Peak shaving</div></div>
+    </div>
+    <div id="chart"></div>
+
+    <div class="sep"></div>
+
+    <h2>Kosten</h2>
+    <div class="kpi">
+      <div class="box"><div class="v" id="kpiNoBatFixed">—</div><div class="l">Vast zonder batterij</div></div>
+      <div class="box"><div class="v" id="kpiNoBatDyn">—</div><div class="l">Dynamisch zonder batterij</div></div>
+    </div>
+    <div class="kpi">
+      <div class="box"><div class="v" id="kpiWithBatFixed">—</div><div class="l">Vast met batterij</div></div>
+      <div class="box"><div class="v" id="kpiWithBatDyn">—</div><div class="l">Dynamisch met batterij</div></div>
+    </div>
+
+    <h2>Outputgrafiek (alles op dezelfde 0-lijn)</h2>
+    <div id="chart2"></div>
+
+    <div class="sep"></div>
+
+    <h2>Savings vs capacity</h2>
+    <div id="savingsChart"></div>
+
+    <h2>ROI vs capacity</h2>
+    <div id="roiChart"></div>
+
+    <h2>Optimal power vs capacity</h2>
+    <div id="powerChart"></div>
+
+    <h2>Capacity × power optimisation heatmap</h2>
+    <div id="optHeatmapChart"></div>
+
+    <h2>Battery charge / discharge heatmap</h2>
+    <div id="heatmapChart"></div>
+
+    <h2>Peak shaving analysis</h2>
+    <div id="peakChart"></div>
+
+    <div class="small" style="margin-top:8px">
+      Estimated grid capacity cost: <span id="gridCost" class="mono">—</span>
+    </div>
+
+    <div id="notes" class="small"></div>
+  </div>
+</div>
+
+<div id="pdfReport">
+  <h1>Battery Analysis Report</h1>
+
+  <p><b>Period:</b> <span id="reportPeriod"></span></p>
+  <p><b>Battery mode:</b> <span id="reportMode"></span></p>
+  <p><b>Priority export charging:</b> <span id="reportPriorityExport"></span></p>
+  <p><b>Forecast optimisation:</b> <span id="reportForecast"></span></p>
+
+  <h2>Main results</h2>
+  <table>
+    <tr><td><b>Fixed without battery</b></td><td id="reportFixedNoBat"></td></tr>
+    <tr><td><b>Fixed with battery</b></td><td id="reportFixedBat"></td></tr>
+    <tr><td><b>Dynamic without battery</b></td><td id="reportDynNoBat"></td></tr>
+    <tr><td><b>Dynamic with battery</b></td><td id="reportDynBat"></td></tr>
+  </table>
+
+  <h2>Recommended battery</h2>
+  <table>
+    <tr><td><b>Recommended capacity</b></td><td id="reportRecCap"></td></tr>
+    <tr><td><b>Recommended power</b></td><td id="reportRecPower"></td></tr>
+    <tr><td><b>Battery cost</b></td><td id="reportRecCost"></td></tr>
+    <tr><td><b>Fixed ROI</b></td><td id="reportRecRoiFix"></td></tr>
+    <tr><td><b>Dynamic ROI</b></td><td id="reportRecRoiDyn"></td></tr>
+  </table>
+
+  
+<h2>Graphs</h2>
+
+<h3>Import / Export</h3>
+<img id="reportChartMain" style="width:100%;max-width:900px;margin-bottom:20px;">
+
+<h3>Battery operation</h3>
+<img id="reportChartOutput" style="width:100%;max-width:900px;margin-bottom:20px;">
+
+<h3>Savings vs capacity</h3>
+<img id="reportChartSavings" style="width:100%;max-width:900px;margin-bottom:20px;">
+
+<h3>ROI vs capacity</h3>
+<img id="reportChartROI" style="width:100%;max-width:900px;margin-bottom:20px;">
+
+<h2>Notes</h2>
+  <div id="reportNotes"></div>
+</div>
+
+
+<div id="versionPopup" class="versionPopup hidden">
+  <h3>Version Information</h3>
+  <table>
+    <tr><td>UI</td><td id="verUI"></td></tr>
+    <tr><td>Simulation</td><td id="verSim"></td></tr>
+    <tr><td>Battery model</td><td id="verBat"></td></tr>
+    <tr><td>Heatmap</td><td id="verHeat"></td></tr>
+    <tr><td>Sweep</td><td id="verSweep"></td></tr>
+    <tr><td>PDF</td><td id="verPDF"></td></tr>
+    <tr><td>Presets</td><td id="verPresets"></td></tr>
+    <tr><td>Build</td><td id="verBuild"></td></tr>
+  </table>
+  <h3>Changelog</h3>
+  <pre id="changelogBox"></pre>
+</div>
+
+<script src="js/version.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/presets.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
