@@ -1,0 +1,322 @@
+
+    :root {
+      --gap: 12px;
+      --border: #e5e7eb;
+      --muted: #6b7280;
+      --card: #ffffff;
+      --ink: #111827;
+      --bg: #f8fafc;
+    }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+    }
+
+    header {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: baseline;
+      background: white;
+    }
+
+    header h1 {
+      font-size: 16px;
+      margin: 0;
+      font-weight: 900;
+    }
+
+    header .hint {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .wrap {
+      padding: 14px 16px;
+      display: grid;
+      grid-template-columns: 540px 1fr;
+      gap: var(--gap);
+    }
+
+    @media (max-width: 1100px) {
+      .wrap {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+    }
+
+    .card h2 {
+      font-size: 13px;
+      margin: 0 0 10px 0;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    input, select, button, a.linkish {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 9px 10px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      font-size: 13px;
+      background: white;
+      color: var(--ink);
+    }
+
+    a.linkish {
+      display: block;
+      text-decoration: none;
+      overflow-wrap: anywhere;
+    }
+
+    button {
+      cursor: pointer;
+      font-weight: 800;
+    }
+
+    button.primary {
+      background: #111827;
+      color: white;
+      border-color: #111827;
+    }
+
+    button:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    @media (max-width: 560px) {
+      .row {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .small {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.35;
+    }
+
+    .sep {
+      height: 1px;
+      background: var(--border);
+      margin: 10px 0;
+    }
+
+    .kpi {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .kpi .box {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px;
+    }
+
+    .kpi .v {
+      font-size: 16px;
+      font-weight: 900;
+    }
+
+    .kpi .l {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .checkrow {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: white;
+    }
+
+    .checkrow input[type="checkbox"] {
+      width: auto;
+      margin: 0;
+      transform: scale(1.1);
+    }
+
+    .progressWrap {
+      margin-top: 8px;
+    }
+
+    .progress {
+      width: 100%;
+      height: 16px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: #e5e7eb;
+      border: 1px solid var(--border);
+    }
+
+    .progressBar {
+      height: 100%;
+      width: 0%;
+      background: #111827;
+      transition: width .15s linear;
+    }
+
+    #chart, #chart2, #savingsChart, #roiChart, #powerChart {
+      width: 100%;
+      height: 340px;
+    }
+
+    #chart {
+      height: 500px;
+    }
+
+    @media (max-width: 980px) {
+      #chart {
+        height: 400px;
+      }
+    }
+
+    .ok { color: #065f46; }
+    .warn { color: #b45309; }
+    .bad { color: #b91c1c; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+
+    #pdfReport {
+      display: none;
+      padding: 24px;
+      background: white;
+      color: #111827;
+    }
+
+    #pdfReport h1, #pdfReport h2 {
+      margin: 0 0 10px 0;
+    }
+
+    #pdfReport table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-bottom: 18px;
+    }
+
+    #pdfReport td, #pdfReport th {
+      border: 1px solid #d1d5db;
+      padding: 8px;
+      vertical-align: top;
+      font-size: 13px;
+    }
+
+@media print {
+  body {
+    background: white;
+  }
+
+  header,
+  .wrap {
+    display: none !important;
+  }
+
+  #pdfReport {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    padding: 0 !important;
+  }
+}
+  
+
+#optHeatmapChart {
+  width: 100%;
+  height: 420px;
+}
+
+.version {
+  cursor: pointer;
+  font-size: 12px;
+  color: #6b7280;
+  margin-left: 8px;
+  user-select: none;
+}
+
+.versionPopup {
+  position: fixed;
+  right: 20px;
+  top: 60px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  padding: 14px;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.15);
+  max-width: 360px;
+  z-index: 9999;
+}
+
+.versionPopup table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 12px;
+}
+.versionPopup td {
+  border-bottom: 1px solid #eee;
+  padding: 4px 0;
+  font-size: 12px;
+}
+.versionPopup pre {
+  white-space: pre-wrap;
+  font-size: 12px;
+  margin: 0;
+}
+.hidden { display:none; }
+
+.presetManager{
+  border:1px solid #e5e7eb;
+  border-radius:10px;
+  background:white;
+  padding:8px;
+}
+.presetItem{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) repeat(4, auto);
+  gap:8px;
+  align-items:center;
+  padding:8px 0;
+  border-bottom:1px solid #f0f0f0;
+}
+.presetItem:last-child{border-bottom:none;}
+.presetName{
+  font-size:13px;
+  font-weight:700;
+  overflow-wrap:anywhere;
+}
+.presetMeta{
+  font-size:11px;
+  color:#6b7280;
+}
+.presetManager button{
+  width:auto;
+  padding:6px 10px;
+  font-size:12px;
+}
