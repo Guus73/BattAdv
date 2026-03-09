@@ -1,4 +1,105 @@
 
+function buildSystemDiagramHtml(){
+  const phaseCount = Number(el.phaseSetup ? el.phaseSetup.value : 1) || 1;
+  const baseLabel = "Base";
+  const stackHeight = (el.pricingModel && el.pricingModel.value === "modular") ? getModularConfig(Number(el.cap ? el.cap.value : 0) || 0).stackHeight : 1;
+  let rows = [];
+  for (let p = 1; p <= phaseCount; p++){
+    let chips = ['<span class="chip">Phase ' + p + '</span>', '<span class="chip">' + baseLabel + '</span>'];
+    for (let i = 2; i <= stackHeight; i++){
+      chips.push('<span class="chip">Module ' + (i - 1) + '</span>');
+    }
+    rows.push('<div class="phaseRow">' + chips.join('') + '</div>');
+  }
+  rows.push('<div class="phaseRow"><span class="chip">Grid</span><span class="chip">Home</span><span class="chip">Battery</span></div>');
+  return rows.join('');
+}
+
+function computeSelfConsumptionStats(timeline){
+  if (!timeline || !timeline.length){
+    return { before:0, after:0, improvement:0 };
+  }
+  let importBefore = 0, importAfter = 0, exportBefore = 0, exportAfter = 0;
+  for (const p of timeline){
+    importBefore += Number(p.import0 || 0);
+    importAfter += Number(p.import1 || 0);
+    exportBefore += Math.max(0, -Number(p.export0 || 0));
+    exportAfter += Math.max(0, -Number(p.export1 || 0));
+  }
+  const before = (importBefore + exportBefore) > 0 ? (1 - exportBefore / Math.max(1e-9, importBefore + exportBefore)) * 100 : 0;
+  const after = (importAfter + exportAfter) > 0 ? (1 - exportAfter / Math.max(1e-9, importAfter + exportAfter)) * 100 : 0;
+  return { before:before, after:after, improvement:after - before };
+}
+
+async function renderMonthlyPeakReportChart(timeline){
+  const rows = buildMonthlyReportTables(timeline).peakRows || [];
+  const chartId = "reportMonthlyPeakChartTemp";
+  let node = document.getElementById(chartId);
+  if (!node){
+    node = document.createElement("div");
+    node.id = chartId;
+    node.style.position = "fixed";
+    node.style.left = "-99999px";
+    node.style.top = "0";
+    node.style.width = "1000px";
+    node.style.height = "450px";
+    document.body.appendChild(node);
+  }
+  await Plotly.newPlot(chartId, [
+    { x: rows.map(r=>r.month), y: rows.map(r=>r.peakBefore), type:"bar", name:"Before" },
+    { x: rows.map(r=>r.month), y: rows.map(r=>r.peakAfter), type:"bar", name:"After" }
+  ], {
+    barmode:"group",
+    margin:{t:10,r:10,b:80,l:55},
+    xaxis:{title:"Month", tickangle:-35},
+    yaxis:{title:"Peak kW"},
+    legend:{orientation:"h"}
+  }, {responsive:false});
+  try{
+    return await Plotly.toImage(chartId, {format:"png", width:1000, height:450});
+  }catch(e){
+    return null;
+  }
+}
+
+async function renderWaterfallReportChart(run){
+  const chartId = "reportWaterfallChartTemp";
+  let node = document.getElementById(chartId);
+  if (!node){
+    node = document.createElement("div");
+    node.id = chartId;
+    node.style.position = "fixed";
+    node.style.left = "-99999px";
+    node.style.top = "0";
+    node.style.width = "1000px";
+    node.style.height = "450px";
+    document.body.appendChild(node);
+  }
+
+  const noBat = Number(run.fixed0 || 0);
+  const withBat = Number(run.fixed1 || 0);
+  const savings = noBat - withBat;
+
+  await Plotly.newPlot(chartId, [{
+    type: "waterfall",
+    orientation: "v",
+    x: ["No battery cost", "Battery savings", "Battery cost"],
+    y: [noBat, -savings, withBat],
+    measure: ["absolute", "relative", "total"]
+  }], {
+    margin:{t:10,r:10,b:60,l:55},
+    yaxis:{title:"€"},
+    showlegend:false
+  }, {responsive:false});
+
+  try{
+    return await Plotly.toImage(chartId, {format:"png", width:1000, height:450});
+  }catch(e){
+    return null;
+  }
+}
+
+
 function monthKeyFromMillis(ms){
   return DateTime.fromMillis(ms, {zone:el.tz.value}).toFormat("yyyy-LL");
 }
@@ -2178,22 +2279,21 @@ function fillPdfReport() {
     }
   }
 
+  const selfStats = computeSelfConsumptionStats(run.timeline);
+  const utilPct = Math.max(0, Math.min(100, metrics.cyclesYear / 365 * 100));
+
   document.getElementById("reportExecSystem").textContent =
     (el.pricingModel && el.pricingModel.value === "modular" && el.modularFamily) ? (el.modularFamily.options[el.modularFamily.selectedIndex] ? el.modularFamily.options[el.modularFamily.selectedIndex].text : "Modular system") : "Generic battery";
   document.getElementById("reportExecCap").textContent = cap ? (cap + " kWh") : "—";
   document.getElementById("reportExecPower").textContent = pmax ? (pmax + " kW") : "—";
   document.getElementById("reportExecCost").textContent = euro(cost);
-  document.getElementById("reportExecAnnualFix").textContent = euro(annualFix);
-  document.getElementById("reportExecAnnualDyn").textContent = annualDyn != null ? euro(annualDyn) : "—";
   document.getElementById("reportExecRoiFix").textContent = roiFix != null ? (roiFix.toFixed(1) + " years") : "—";
   document.getElementById("reportExecRoiDyn").textContent = roiDyn != null ? (roiDyn.toFixed(1) + " years") : "—";
   document.getElementById("reportExecLifetime").textContent = metrics.lifetimeYears != null ? (metrics.lifetimeYears.toFixed(1) + " years") : "—";
   document.getElementById("reportExecPeakReduction").textContent = metrics.peakReduction.toFixed(2) + " kW";
 
-  document.getElementById("reportPeriod").textContent =
-    (el.from.value || "—") + " → " + (el.to.value || "—");
-  document.getElementById("reportMode").textContent =
-    el.batMode.value === "self" ? "Zelfconsumptie" : (el.batMode.value === "peak" ? "Peak shaving optimisation" : (el.batMode.value === "hybrid_price_peak" ? "Hybrid dynamic price + peak" : (el.batMode.value === "hybrid_self_peak" ? "Hybrid self consumption + peak" : "Dynamisch arbitrage")));
+  document.getElementById("reportPeriod").textContent = (el.from.value || "—") + " → " + (el.to.value || "—");
+  document.getElementById("reportMode").textContent = el.batMode.value === "self" ? "Zelfconsumptie" : (el.batMode.value === "peak" ? "Peak shaving optimisation" : (el.batMode.value === "hybrid_price_peak" ? "Hybrid dynamic price + peak" : (el.batMode.value === "hybrid_self_peak" ? "Hybrid self consumption + peak" : "Dynamisch arbitrage")));
   document.getElementById("reportPriorityExport").textContent = el.priorityExport.checked ? "Ja" : "Nee";
   document.getElementById("reportForecast").textContent = el.optForecast.checked ? "Ja" : "Nee";
   document.getElementById("reportPricingModel").textContent = el.pricingModel ? el.pricingModel.value : "—";
@@ -2222,6 +2322,23 @@ function fillPdfReport() {
   }
 
   renderReportTableBodies(buildMonthlyReportTables(run.timeline));
+
+  const diag = document.getElementById("reportSystemDiagram");
+  if (diag) diag.innerHTML = buildSystemDiagramHtml();
+
+  const selfCard = document.getElementById("reportSelfConsumptionCard");
+  if (selfCard){
+    selfCard.innerHTML = '<div>Before battery</div><div class="big">' + selfStats.before.toFixed(1) + '%</div>' +
+      '<div>After battery</div><div class="big">' + selfStats.after.toFixed(1) + '%</div>' +
+      '<div><b>Improvement:</b> +' + selfStats.improvement.toFixed(1) + ' percentage points</div>';
+  }
+
+  const utilCard = document.getElementById("reportUtilisationCard");
+  if (utilCard){
+    utilCard.innerHTML = '<div>Cycles per year</div><div class="big">' + metrics.cyclesYear.toFixed(1) + '</div>' +
+      '<div>Estimated utilization</div><div class="big">' + utilPct.toFixed(0) + '%</div>' +
+      '<div><b>Total cycles:</b> ' + metrics.cycles.toFixed(2) + '</div>';
+  }
 
   document.getElementById("reportNotes").innerHTML =
     "<div><b>Cycles:</b> " + (el.kpiCycles ? el.kpiCycles.textContent : "—") +
@@ -2252,12 +2369,18 @@ async function captureChartsForReport(){
     }
   }
 
+  const capVal = Math.max(0, Number(el.cap ? el.cap.value : 0) || 0);
+  const pmaxVal = Math.max(0, Number(el.pmax ? el.pmax.value : 0) || 0);
+  const run = runSimulationFor(capVal, pmaxVal);
+
   const main=await cap("chart");
   const out=await cap("chart2");
   const peak=await cap("peakChart");
   const sav=await cap("savingsChart");
   const roi=await cap("roiChart");
   const heat=await cap("heatmapChart");
+  const waterfall=await renderWaterfallReportChart(run);
+  const monthlyPeak=await renderMonthlyPeakReportChart(run.timeline);
 
   if(main) document.getElementById("reportChartMain").src=main;
   if(out) document.getElementById("reportChartOutput").src=out;
@@ -2265,6 +2388,8 @@ async function captureChartsForReport(){
   if(sav) document.getElementById("reportChartSavings").src=sav;
   if(roi) document.getElementById("reportChartROI").src=roi;
   if(heat) document.getElementById("reportChartHeatmap").src=heat;
+  if(waterfall) document.getElementById("reportChartWaterfall").src=waterfall;
+  if(monthlyPeak) document.getElementById("reportChartMonthlyPeak").src=monthlyPeak;
 }
 
 
