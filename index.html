@@ -198,17 +198,7 @@
       </div>
       <div>
         <label>Family preset</label>
-        <select id="modularFamily">
-          <option value="custom">Custom</option>
-          <option value="zendure_solarflow_1600_ac_plus">Zendure SolarFlow 1600 AC+</option>
-          <option value="zendure_solarflow_2400_ac_plus">Zendure SolarFlow 2400 AC+</option>
-          <option value="zendure_solarflow_2400_ac">Zendure SolarFlow 2400 AC</option>
-          <option value="zendure_hyper_2000">Zendure Hyper 2000</option>
-          <option value="zendure_hub_2000">Zendure SolarFlow Hub 2000</option>
-          <option value="zendure_solarflow_800">Zendure SolarFlow 800</option>
-          <option value="indevolt_powerflex_2000">Indevolt PowerFlex 2000</option>
-          <option value="indevolt_solidflex_2000">Indevolt SolidFlex 2000</option>
-        </select>
+        <select id="modularFamily"></select>
       </div>
     </div>
 
@@ -267,6 +257,11 @@
       </div>
 
       <div class="row" style="margin-top:10px">
+        <div><button id="addFamilySystem" type="button">Add battery system</button></div>
+        <div><button id="deleteFamilySystem" type="button">Delete user system</button></div>
+      </div>
+
+      <div class="row" style="margin-top:10px">
         <div><button id="resetFamilyPreset" type="button">Reset family preset</button></div>
         <div><button id="exportFamilyPresets" type="button">Export family presets</button></div>
       </div>
@@ -280,6 +275,40 @@
         <input id="pricesExVat" type="checkbox" />
         <label for="pricesExVat" style="margin:0;color:var(--ink);font-size:13px;">Calculate with excl. btw (-21%) prices</label>
       </div>
+
+      <div id="familyPresetStatus" class="small" style="margin-top:8px"></div>
+      <dialog id="familySystemDialog" style="max-width:900px;width:95%;border:1px solid #d1d5db;border-radius:12px;padding:16px;">
+        <h3 style="margin-top:0">Battery system</h3>
+        <div class="row">
+          <div><label>System id</label><input id="familySystemId" type="text" placeholder="my_system_id" /></div>
+          <div><label>Display name</label><input id="familySystemLabel" type="text" placeholder="My Battery System" /></div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <div><label>Brand group</label><input id="familySystemBrand" type="text" placeholder="User systems" /></div>
+          <div><label>Base unit power (kW)</label><input id="familySystemBasePower" type="number" step="0.1" value="2.0" /></div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <div><label>Base capacity per stack (kWh)</label><input id="familySystemBaseCapacity" type="number" step="0.01" value="2.0" /></div>
+          <div><label>Extra module capacity (kWh each)</label><input id="familySystemModuleCapacity" type="number" step="0.01" value="2.0" /></div>
+        </div>
+        <div class="small" style="margin-top:8px">Complete price per stack height:</div>
+        <div class="row" style="margin-top:10px">
+          <div><label>Height 1 (€)</label><input id="familySystemPrice1" type="number" step="10" value="0" /></div>
+          <div><label>Height 2 (€)</label><input id="familySystemPrice2" type="number" step="10" value="0" /></div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <div><label>Height 3 (€)</label><input id="familySystemPrice3" type="number" step="10" value="0" /></div>
+          <div><label>Height 4 (€)</label><input id="familySystemPrice4" type="number" step="10" value="0" /></div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <div><label>Height 5 (€)</label><input id="familySystemPrice5" type="number" step="10" value="0" /></div>
+          <div><label>Height 6 (€)</label><input id="familySystemPrice6" type="number" step="10" value="0" /></div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <div><button id="saveFamilySystem" type="button">Save system</button></div>
+          <div><button id="closeFamilySystemDialog" type="button">Close</button></div>
+        </div>
+      </dialog>
 
       <div id="familyPresetStatus" class="small" style="margin-top:8px"></div>
       <dialog id="familyPresetExportDialog" style="max-width:900px;width:95%;border:1px solid #d1d5db;border-radius:12px;padding:16px;">
