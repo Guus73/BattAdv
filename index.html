@@ -187,14 +187,115 @@
 
     <div class="sep"></div>
 
-    <h2>6) Battery prijsmodel (3 ranges)</h2>
+    <h2>6) Battery pricing model</h2>
     <div class="row">
-      <div><label>0–5 kWh (€/kWh)</label><input id="tier1" type="number" step="1" value="900" /></div>
-      <div><label>5–15 kWh (€/kWh)</label><input id="tier2" type="number" step="1" value="700" /></div>
+      <div>
+        <label>Pricing model</label>
+        <select id="pricingModel">
+          <option value="tiered">Tiered €/kWh</option>
+          <option value="modular">Modular phase-aware system</option>
+        </select>
+      </div>
+      <div>
+        <label>Family preset</label>
+        <select id="modularFamily">
+          <option value="custom">Custom</option>
+          <option value="zendure_solarflow_1600_ac_plus">Zendure SolarFlow 1600 AC+</option>
+          <option value="zendure_solarflow_2400_ac_plus">Zendure SolarFlow 2400 AC+</option>
+          <option value="zendure_solarflow_2400_ac">Zendure SolarFlow 2400 AC</option>
+          <option value="zendure_hyper_2000">Zendure Hyper 2000</option>
+          <option value="zendure_hub_2000">Zendure SolarFlow Hub 2000</option>
+          <option value="zendure_solarflow_800">Zendure SolarFlow 800</option>
+          <option value="indevolt_powerflex_2000">Indevolt PowerFlex 2000</option>
+          <option value="indevolt_solidflex_2000">Indevolt SolidFlex 2000</option>
+        </select>
+      </div>
     </div>
-    <div class="row" style="margin-top:10px">
-      <div><label>&gt;15 kWh (€/kWh)</label><input id="tier3" type="number" step="1" value="550" /></div>
-      <div><label>Install / fixed (€)</label><input id="batFixedCost" type="number" step="10" value="1500" /></div>
+
+    <div id="tieredPricingBox">
+      <div class="row" style="margin-top:10px">
+        <div><label>0–5 kWh (€/kWh)</label><input id="tier1" type="number" step="1" value="900" /></div>
+        <div><label>5–15 kWh (€/kWh)</label><input id="tier2" type="number" step="1" value="700" /></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div><label>&gt;15 kWh (€/kWh)</label><input id="tier3" type="number" step="1" value="550" /></div>
+        <div><label>Install / fixed (€)</label><input id="batFixedCost" type="number" step="10" value="1500" /></div>
+      </div>
+    </div>
+
+    <div id="modularPricingBox" style="display:none">
+      <div class="row" style="margin-top:10px">
+        <div>
+          <label>Phase setup</label>
+          <select id="phaseSetup">
+            <option value="1">1 phase</option>
+            <option value="2">2 phase</option>
+            <option value="3">3 phase</option>
+          </select>
+        </div>
+        <div><label>Install / fixed (€)</label><input id="batFixedCost" type="number" step="10" value="1500" /></div>
+      </div>
+
+      <div class="row" style="margin-top:10px">
+        <div><label>Base capacity per stack (kWh)</label><input id="baseCapacity" type="number" step="0.01" value="2.0" /></div>
+        <div><label>Extra module capacity (kWh each)</label><input id="moduleCapacity" type="number" step="0.01" value="2.0" /></div>
+      </div>
+
+      <div class="row" style="margin-top:10px">
+        <div><label>Base unit power (kW each)</label><input id="baseUnitPower" type="number" step="0.1" value="2.4" /></div>
+        <div><label>Accessory cost (€)</label><input id="accessoryCost" type="number" step="10" value="0" /></div>
+      </div>
+
+      <div class="small" style="margin-top:8px">Set the COMPLETE price for each stack height. Height 1 = base only, height 6 = base + 5 modules. Prices are NOT added together; the selected stack-height price is used directly.</div>
+
+      <div class="row" style="margin-top:10px">
+        <div><label>Stack height 1 price (€)</label><input id="stackPrice1" type="number" step="10" value="0" /></div>
+        <div><label>Stack height 2 price (€)</label><input id="stackPrice2" type="number" step="10" value="0" /></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div><label>Stack height 3 price (€)</label><input id="stackPrice3" type="number" step="10" value="0" /></div>
+        <div><label>Stack height 4 price (€)</label><input id="stackPrice4" type="number" step="10" value="0" /></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div><label>Stack height 5 price (€)</label><input id="stackPrice5" type="number" step="10" value="0" /></div>
+        <div><label>Stack height 6 price (€)</label><input id="stackPrice6" type="number" step="10" value="0" /></div>
+      </div>
+
+      <div class="row" style="margin-top:10px">
+        <div><button id="applyModular" type="button">Apply modular setup to cap/power</button></div>
+        <div><button id="updateFamilyPreset" type="button">Update family preset</button></div>
+      </div>
+
+      <div class="row" style="margin-top:10px">
+        <div><button id="resetFamilyPreset" type="button">Reset family preset</button></div>
+        <div><button id="exportFamilyPresets" type="button">Export family presets</button></div>
+      </div>
+
+      <div class="row" style="margin-top:10px">
+        <div><button id="importFamilyPresetsBtn" type="button">Import family presets</button></div>
+        <div><input id="importFamilyPresetsFile" type="file" accept=".json,application/json" style="display:none" /></div>
+      </div>
+
+      <div class="checkrow" style="margin-top:10px">
+        <input id="pricesExVat" type="checkbox" />
+        <label for="pricesExVat" style="margin:0;color:var(--ink);font-size:13px;">Calculate with excl. btw (-21%) prices</label>
+      </div>
+
+      <div id="familyPresetStatus" class="small" style="margin-top:8px"></div>
+      <dialog id="familyPresetExportDialog" style="max-width:900px;width:95%;border:1px solid #d1d5db;border-radius:12px;padding:16px;">
+        <h3 style="margin-top:0">Export family presets</h3>
+        <div class="small" style="margin-bottom:8px">Your browser may block direct download. Use Copy, or Download from the link below.</div>
+        <textarea id="familyPresetExportText" style="width:100%;min-height:260px;box-sizing:border-box;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-family:ui-monospace,monospace;font-size:12px;"></textarea>
+        <div class="row" style="margin-top:10px">
+          <div><button id="copyFamilyPresetExport" type="button">Copy JSON</button></div>
+          <div><a id="downloadFamilyPresetExport" class="linkish" download="energyui_family_presets.json" href="#">Download JSON file</a></div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <div><button id="closeFamilyPresetExport" type="button">Close</button></div>
+          <div></div>
+        </div>
+      </dialog>
+      <div id="modularSummary" class="small" style="margin-top:8px"></div>
     </div>
 
     <div class="sep"></div>
@@ -241,6 +342,14 @@
     </div>
 
     <div id="sweepInfo" class="small" style="margin-top:8px"></div>
+    <div id="modularSweepPickerWrap" style="display:none;margin-top:10px">
+      <label>Choose modular configuration from sweep</label>
+      <select id="modularSweepPicker"></select>
+      <div class="row" style="margin-top:10px">
+        <div><button id="applySweepSelection" type="button">Use selected modular configuration</button></div>
+        <div></div>
+      </div>
+    </div>
   </div>
 
   <div class="card">
