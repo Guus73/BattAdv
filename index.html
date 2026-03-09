@@ -443,6 +443,19 @@
   <div class="reportGrid">
     <div class="reportCard">
       <h2>Executive summary</h2>
+<div class="reportCard highlightBox">
+<h2>🔋 Recommended System</h2>
+<div class="kpiGrid">
+<div class="kpi"><span>⚡ Capacity</span><b id="reportExecCap"></b></div>
+<div class="kpi"><span>🔌 Power</span><b id="reportExecPower"></b></div>
+<div class="kpi"><span>💰 Investment</span><b id="reportExecCost"></b></div>
+<div class="kpi"><span>📉 ROI (fixed)</span><b id="reportExecRoiFix"></b></div>
+<div class="kpi"><span>📈 ROI (dynamic)</span><b id="reportExecRoiDyn"></b></div>
+<div class="kpi"><span>🔁 Battery lifetime</span><b id="reportExecLifetime"></b></div>
+<div class="kpi"><span>⚡ Peak reduction</span><b id="reportExecPeakReduction"></b></div>
+</div>
+</div>
+
       <table>
         <tr><td><b>Selected system</b></td><td id="reportExecSystem"></td></tr>
         <tr><td><b>Capacity</b></td><td id="reportExecCap"></td></tr>
@@ -473,7 +486,16 @@
     </div>
   </div>
 
-  <h2>Main results</h2>
+  
+<h2>Main results</h2>
+<table>
+<tr><th>Scenario</th><th>Annual Cost</th></tr>
+<tr><td>No battery (fixed)</td><td id="reportFixedNoBat"></td></tr>
+<tr><td>Battery (fixed)</td><td id="reportFixedBat"></td></tr>
+<tr><td>No battery (dynamic)</td><td id="reportDynNoBat"></td></tr>
+<tr><td>Battery (dynamic)</td><td id="reportDynBat"></td></tr>
+</table>
+
   <table>
     <tr><td><b>Fixed without battery</b></td><td id="reportFixedNoBat"></td></tr>
     <tr><td><b>Fixed with battery</b></td><td id="reportFixedBat"></td></tr>
@@ -514,7 +536,35 @@
 
   <div class="reportPageBreak"></div>
 
-  <h2>Graphs</h2>
+  
+<h2>Visual analysis</h2>
+
+<div class="graphGrid">
+  <div class="graphBlock">
+    <h3>Savings waterfall</h3>
+    <img id="reportChartWaterfall" style="width:100%;max-width:900px;margin-bottom:20px;">
+  </div>
+  <div class="graphBlock">
+    <h3>Battery system diagram</h3>
+    <div id="reportSystemDiagram" class="systemDiagram"></div>
+  </div>
+  <div class="graphBlock">
+    <h3>Monthly peak bar chart</h3>
+    <img id="reportChartMonthlyPeak" style="width:100%;max-width:900px;margin-bottom:20px;">
+  </div>
+  <div class="graphBlock">
+    <h3>Self-consumption improvement</h3>
+    <div id="reportSelfConsumptionCard" class="miniInsightCard"></div>
+  </div>
+  <div class="graphBlock">
+    <h3>Battery utilisation gauge</h3>
+    <div id="reportUtilisationCard" class="miniInsightCard"></div>
+  </div>
+</div>
+
+<h2>Graphs</h2>
+<div class="graphGrid">
+
 
   <div class="graphBlock"><h3>Import / Export</h3>
   <img id="reportChartMain"></div> style="width:100%;max-width:900px;margin-bottom:20px;">
@@ -531,7 +581,7 @@
   <h3>ROI vs capacity</h3>
   <img id="reportChartROI" style="width:100%;max-width:900px;margin-bottom:20px;">
 
-  <h3>Battery charge / discharge heatmap</h3>
+  </div><div class="graphBlock"><h3>Battery charge / discharge heatmap</h3>
   <img id="reportChartHeatmap" style="width:100%;max-width:900px;margin-bottom:20px;">
 
   <div class="reportPageBreak"></div>
