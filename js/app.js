@@ -1,4 +1,55 @@
 
+function computeSelfConsumptionAndSelfSufficiency(timeline){
+  if (!timeline || !timeline.length){
+    return { selfConsumptionBefore:0, selfConsumptionAfter:0, selfSufficiencyBefore:0, selfSufficiencyAfter:0 };
+  }
+  let importBefore = 0, importAfter = 0, exportBefore = 0, exportAfter = 0;
+  for (const p of timeline){
+    importBefore += Number(p.import0 || 0);
+    importAfter += Number(p.import1 || 0);
+    exportBefore += Math.max(0, -Number(p.export0 || 0));
+    exportAfter += Math.max(0, -Number(p.export1 || 0));
+  }
+  let demandBefore = 0, demandAfter = 0;
+  for (const p of timeline){
+    demandBefore += Number(p.import0 || 0) + Math.max(0, -Number(p.export0 || 0));
+    demandAfter += Number(p.import1 || 0) + Math.max(0, -Number(p.export1 || 0));
+  }
+  const selfConsumptionBefore = (importBefore + exportBefore) > 0 ? (1 - exportBefore / Math.max(1e-9, importBefore + exportBefore)) * 100 : 0;
+  const selfConsumptionAfter = (importAfter + exportAfter) > 0 ? (1 - exportAfter / Math.max(1e-9, importAfter + exportAfter)) * 100 : 0;
+  const selfSufficiencyBefore = demandBefore > 0 ? (1 - importBefore / demandBefore) * 100 : 0;
+  const selfSufficiencyAfter = demandAfter > 0 ? (1 - importAfter / demandAfter) * 100 : 0;
+  return { selfConsumptionBefore, selfConsumptionAfter, selfSufficiencyBefore, selfSufficiencyAfter };
+}
+
+function computeSizingConclusion(currentCap, recCap, annualFix, cost){
+  const rec = Number(recCap || currentCap || 0);
+  const cur = Number(currentCap || 0);
+  const diff = cur - rec;
+  const bandLow = Math.max(0, rec * 0.85);
+  const bandHigh = rec * 1.15;
+  let deltaText = "Well sized";
+  if (diff > 0.1) deltaText = "+" + diff.toFixed(1) + " kWh oversized";
+  else if (diff < -0.1) deltaText = Math.abs(diff).toFixed(1) + " kWh undersized";
+  let impact = "—";
+  if (cost > 0 && annualFix > 0){
+    const simpleImpact = Math.abs(diff) / Math.max(1, cur) * annualFix * 0.35;
+    impact = euro(simpleImpact) + "/year";
+  }
+  return {
+    band: bandLow.toFixed(1) + "–" + bandHigh.toFixed(1) + " kWh",
+    delta: deltaText,
+    impact: impact
+  };
+}
+
+function interpretUtilisation(cyclesYear){
+  if (cyclesYear < 100) return "LOW";
+  if (cyclesYear < 220) return "MEDIUM";
+  return "HIGH";
+}
+
+
 function buildSystemDiagramHtml(){
   const phaseCount = Number(el.phaseSetup ? el.phaseSetup.value : 1) || 1;
   const baseLabel = "Base";
@@ -56,7 +107,7 @@ async function renderMonthlyPeakReportChart(timeline){
     legend:{orientation:"h"}
   }, {responsive:false});
   try{
-    return await Plotly.toImage(chartId, {format:"png", width:1000, height:450});
+    return await Plotly.toImage(chartId, {format:"png", width:900, height:340});
   }catch(e){
     return null;
   }
@@ -93,7 +144,7 @@ async function renderWaterfallReportChart(run){
   }, {responsive:false});
 
   try{
-    return await Plotly.toImage(chartId, {format:"png", width:1000, height:450});
+    return await Plotly.toImage(chartId, {format:"png", width:900, height:340});
   }catch(e){
     return null;
   }
@@ -173,14 +224,15 @@ function renderReportTableBodies(monthly){
   const peakBody = document.getElementById("reportMonthlyPeakBody");
   if (energyBody){
     energyBody.innerHTML = (monthly.energyRows || []).map(function(r){
+      function rk(v){ return Math.round(v); }
       return "<tr>" +
         "<td>" + escapeHtml(r.month) + "</td>" +
-        "<td>" + r.importBefore.toFixed(1) + " kWh</td>" +
-        "<td>" + r.importAfter.toFixed(1) + " kWh</td>" +
-        "<td>" + r.exportBefore.toFixed(1) + " kWh</td>" +
-        "<td>" + r.exportAfter.toFixed(1) + " kWh</td>" +
-        "<td>" + r.charge.toFixed(1) + " kWh</td>" +
-        "<td>" + r.discharge.toFixed(1) + " kWh</td>" +
+        "<td>" + rk(r.importBefore) + "</td>" +
+        "<td>" + rk(r.importAfter) + "</td>" +
+        "<td>" + rk(r.exportBefore) + "</td>" +
+        "<td>" + rk(r.exportAfter) + "</td>" +
+        "<td>" + rk(r.charge) + "</td>" +
+        "<td>" + rk(r.discharge) + "</td>" +
       "</tr>";
     }).join("");
   }
@@ -188,9 +240,9 @@ function renderReportTableBodies(monthly){
     peakBody.innerHTML = (monthly.peakRows || []).map(function(r){
       return "<tr>" +
         "<td>" + escapeHtml(r.month) + "</td>" +
-        "<td>" + r.peakBefore.toFixed(2) + " kW</td>" +
-        "<td>" + r.peakAfter.toFixed(2) + " kW</td>" +
-        "<td>" + r.reduction.toFixed(2) + " kW</td>" +
+        "<td>" + r.peakBefore.toFixed(2) + "</td>" +
+        "<td>" + r.peakAfter.toFixed(2) + "</td>" +
+        "<td>" + r.reduction.toFixed(2) + "</td>" +
         "<td>" + euro(r.costAfter) + "</td>" +
       "</tr>";
     }).join("");
@@ -2263,9 +2315,9 @@ function fillPdfReport() {
   const saveFix = run.fixed0 - run.fixed1;
   const annualFix = saveFix * scaleToYear();
   const roiFix = annualFix > 0 ? cost / annualFix : null;
-  let saveDyn = null, annualDyn = null, roiDyn = null;
+  let annualDyn = null, roiDyn = null;
   if (run.dyn0Cost != null && run.dyn1Cost != null){
-    saveDyn = run.dyn0Cost - run.dyn1Cost;
+    const saveDyn = run.dyn0Cost - run.dyn1Cost;
     annualDyn = saveDyn * scaleToYear();
     roiDyn = annualDyn > 0 ? cost / annualDyn : null;
   }
@@ -2279,18 +2331,28 @@ function fillPdfReport() {
     }
   }
 
-  const selfStats = computeSelfConsumptionStats(run.timeline);
-  const utilPct = Math.max(0, Math.min(100, metrics.cyclesYear / 365 * 100));
+  const sc = computeSelfConsumptionAndSelfSufficiency(run.timeline);
+  const utilPct = Math.max(0, Math.min(100, metrics.cyclesYear / 250 * 100));
+  const monthly = buildMonthlyReportTables(run.timeline);
+  const sizing = computeSizingConclusion(cap, lastRecommended ? lastRecommended.cap : cap, annualFix, cost);
+  const cycleLimitYears = metrics.lifetimeYears;
+  const calendarLife = 15;
+  const displayedLife = cycleLimitYears != null ? Math.min(cycleLimitYears, calendarLife) : calendarLife;
+  const avgPeakReduction = (monthly.peakRows || []).length ? monthly.peakRows.reduce(function(s,r){ return s + r.reduction; }, 0) / monthly.peakRows.length : 0;
 
   document.getElementById("reportExecSystem").textContent =
     (el.pricingModel && el.pricingModel.value === "modular" && el.modularFamily) ? (el.modularFamily.options[el.modularFamily.selectedIndex] ? el.modularFamily.options[el.modularFamily.selectedIndex].text : "Modular system") : "Generic battery";
   document.getElementById("reportExecCap").textContent = cap ? (cap + " kWh") : "—";
-  document.getElementById("reportExecPower").textContent = pmax ? (pmax + " kW") : "—";
+  document.getElementById("reportExecPower").textContent = pmax ? (Number(pmax).toFixed(1) + " kW") : "—";
   document.getElementById("reportExecCost").textContent = euro(cost);
+  document.getElementById("reportExecAnnualFix").textContent = euro(annualFix);
+  document.getElementById("reportExecAnnualDyn").textContent = annualDyn != null ? euro(annualDyn) : "—";
   document.getElementById("reportExecRoiFix").textContent = roiFix != null ? (roiFix.toFixed(1) + " years") : "—";
   document.getElementById("reportExecRoiDyn").textContent = roiDyn != null ? (roiDyn.toFixed(1) + " years") : "—";
-  document.getElementById("reportExecLifetime").textContent = metrics.lifetimeYears != null ? (metrics.lifetimeYears.toFixed(1) + " years") : "—";
-  document.getElementById("reportExecPeakReduction").textContent = metrics.peakReduction.toFixed(2) + " kW";
+  document.getElementById("reportExecLifetime").textContent = displayedLife.toFixed(1) + " years";
+  document.getElementById("reportExecPeakReduction").textContent = avgPeakReduction.toFixed(2) + " kW avg";
+  document.getElementById("reportExecSelfConsumption").textContent = sc.selfConsumptionBefore.toFixed(0) + "% → " + sc.selfConsumptionAfter.toFixed(0) + "%";
+  document.getElementById("reportExecSelfSufficiency").textContent = sc.selfSufficiencyBefore.toFixed(0) + "% → " + sc.selfSufficiencyAfter.toFixed(0) + "%";
 
   document.getElementById("reportPeriod").textContent = (el.from.value || "—") + " → " + (el.to.value || "—");
   document.getElementById("reportMode").textContent = el.batMode.value === "self" ? "Zelfconsumptie" : (el.batMode.value === "peak" ? "Peak shaving optimisation" : (el.batMode.value === "hybrid_price_peak" ? "Hybrid dynamic price + peak" : (el.batMode.value === "hybrid_self_peak" ? "Hybrid self consumption + peak" : "Dynamisch arbitrage")));
@@ -2308,46 +2370,60 @@ function fillPdfReport() {
   document.getElementById("reportDynBat").textContent = run.dyn1Cost != null ? euro(run.dyn1Cost) : "—";
 
   if (lastRecommended) {
-    document.getElementById("reportRecCap").textContent = String(lastRecommended.cap) + " kWh";
-    document.getElementById("reportRecPower").textContent = String(lastRecommended.pmax) + " kW";
+    document.getElementById("reportRecCap").textContent = Number(lastRecommended.cap).toFixed(1) + " kWh";
+    document.getElementById("reportRecPower").textContent = Number(lastRecommended.pmax).toFixed(1) + " kW";
     document.getElementById("reportRecCost").textContent = euro(batteryCostEUR(lastRecommended.cap));
     document.getElementById("reportRecRoiFix").textContent = (lastRecommended.fix && lastRecommended.fix.roi != null) ? (lastRecommended.fix.roi.toFixed(1) + " years") : "—";
     document.getElementById("reportRecRoiDyn").textContent = (lastRecommended.dyn && lastRecommended.dyn.roi != null) ? (lastRecommended.dyn.roi.toFixed(1) + " years") : "—";
   } else {
-    document.getElementById("reportRecCap").textContent = "—";
-    document.getElementById("reportRecPower").textContent = "—";
-    document.getElementById("reportRecCost").textContent = "—";
-    document.getElementById("reportRecRoiFix").textContent = "—";
-    document.getElementById("reportRecRoiDyn").textContent = "—";
+    document.getElementById("reportRecCap").textContent = Number(cap).toFixed(1) + " kWh";
+    document.getElementById("reportRecPower").textContent = Number(pmax).toFixed(1) + " kW";
+    document.getElementById("reportRecCost").textContent = euro(cost);
+    document.getElementById("reportRecRoiFix").textContent = roiFix != null ? (roiFix.toFixed(1) + " years") : "—";
+    document.getElementById("reportRecRoiDyn").textContent = roiDyn != null ? (roiDyn.toFixed(1) + " years") : "—";
   }
 
-  renderReportTableBodies(buildMonthlyReportTables(run.timeline));
+  document.getElementById("reportSizingBand").textContent = sizing.band;
+  document.getElementById("reportSizingDelta").textContent = sizing.delta;
+  document.getElementById("reportSizingImpact").textContent = sizing.impact;
+
+  renderReportTableBodies(monthly);
 
   const diag = document.getElementById("reportSystemDiagram");
   if (diag) diag.innerHTML = buildSystemDiagramHtml();
 
   const selfCard = document.getElementById("reportSelfConsumptionCard");
   if (selfCard){
-    selfCard.innerHTML = '<div>Before battery</div><div class="big">' + selfStats.before.toFixed(1) + '%</div>' +
-      '<div>After battery</div><div class="big">' + selfStats.after.toFixed(1) + '%</div>' +
-      '<div><b>Improvement:</b> +' + selfStats.improvement.toFixed(1) + ' percentage points</div>';
+    selfCard.innerHTML = '<div>Before battery</div><div class="big">' + sc.selfConsumptionBefore.toFixed(1) + '%</div>' +
+      '<div>After battery</div><div class="big">' + sc.selfConsumptionAfter.toFixed(1) + '%</div>' +
+      '<div><b>Improvement:</b> +' + (sc.selfConsumptionAfter - sc.selfConsumptionBefore).toFixed(1) + ' p.p.</div>' +
+      '<div><b>Self-sufficiency:</b> ' + sc.selfSufficiencyBefore.toFixed(1) + '% → ' + sc.selfSufficiencyAfter.toFixed(1) + '%</div>';
   }
 
   const utilCard = document.getElementById("reportUtilisationCard");
   if (utilCard){
     utilCard.innerHTML = '<div>Cycles per year</div><div class="big">' + metrics.cyclesYear.toFixed(1) + '</div>' +
       '<div>Estimated utilization</div><div class="big">' + utilPct.toFixed(0) + '%</div>' +
-      '<div><b>Total cycles:</b> ' + metrics.cycles.toFixed(2) + '</div>';
+      '<div><b>Total cycles:</b> ' + metrics.cycles.toFixed(2) + '</div>' +
+      '<div><b>Interpretation:</b> ' + interpretUtilisation(metrics.cyclesYear) + '</div>';
   }
 
+  const insights = [];
+  const billReduction = run.fixed0 > 0 ? ((run.fixed0 - run.fixed1) / Math.max(1e-9, run.fixed0) * 100) : 0;
+  insights.push('Battery reduces fixed-cost energy bill by ' + billReduction.toFixed(0) + '%.');
+  insights.push('Peak shaving is strongest in months with solar surplus and daytime charging.');
+  if (metrics.cyclesYear < 100) insights.push('Battery utilisation is low; the system may be oversized for current demand.');
+  else if (metrics.cyclesYear > 220) insights.push('Battery utilisation is high; sizing appears efficient.');
+  insights.push('Displayed lifetime is capped at 15 years to reflect calendar aging, even when cycle-based life is longer.');
+
   document.getElementById("reportNotes").innerHTML =
-    "<div><b>Cycles:</b> " + (el.kpiCycles ? el.kpiCycles.textContent : "—") +
-    "<br><b>Cycles/year:</b> " + (el.kpiCyclesYear ? el.kpiCyclesYear.textContent : "—") +
-    "<br><b>Lifetime:</b> " + (el.kpiLifetime ? el.kpiLifetime.textContent : "—") +
-    "<br><b>Peak shaving:</b> " + (el.kpiPeakReduction ? el.kpiPeakReduction.textContent : "—") +
-    "<br><b>Monthly grid tariff cost:</b> " + euro(calculateMonthlyPeakCost(run.timeline, Number(el.gridTariff ? el.gridTariff.value : 0) || 0)) +
-    "<br><b>Data quality:</b> CSV " + hoursInRange + " h" + (dynPrices ? (" · prices " + priceHours + "/" + hoursInRange + " h") : "") +
-    "</div><br>" + (el.notes ? el.notes.innerHTML : "—");
+    '<div><b>Insights</b><br>' + insights.map(function(x){ return '• ' + escapeHtml(x); }).join('<br>') + '</div><br>' +
+    '<div><b>Cycles:</b> ' + (el.kpiCycles ? el.kpiCycles.textContent : '—') +
+    '<br><b>Cycles/year:</b> ' + (el.kpiCyclesYear ? el.kpiCyclesYear.textContent : '—') +
+    '<br><b>Lifetime:</b> ' + displayedLife.toFixed(1) + ' years (cycle limit ' + (cycleLimitYears != null ? cycleLimitYears.toFixed(1) : '—') + ' years)' +
+    '<br><b>Monthly grid tariff cost:</b> ' + euro(calculateMonthlyPeakCost(run.timeline, Number(el.gridTariff ? el.gridTariff.value : 0) || 0)) +
+    '<br><b>Data quality:</b> CSV ' + hoursInRange + ' h' + (dynPrices ? (' · prices ' + priceHours + '/' + hoursInRange + ' h') : '') +
+    '</div>';
 
   document.getElementById("reportMetaVersion").textContent = (window.VERSION && window.VERSION.ui) ? window.VERSION.ui : "unknown";
   document.getElementById("reportMetaGenerated").textContent = new Date().toLocaleString();
