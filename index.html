@@ -436,13 +436,42 @@
   </div>
 </div>
 
+
 <div id="pdfReport">
   <h1>Battery Analysis Report</h1>
 
-  <p><b>Period:</b> <span id="reportPeriod"></span></p>
-  <p><b>Battery mode:</b> <span id="reportMode"></span></p>
-  <p><b>Priority export charging:</b> <span id="reportPriorityExport"></span></p>
-  <p><b>Forecast optimisation:</b> <span id="reportForecast"></span></p>
+  <div class="reportGrid">
+    <div class="reportCard">
+      <h2>Executive summary</h2>
+      <table>
+        <tr><td><b>Selected system</b></td><td id="reportExecSystem"></td></tr>
+        <tr><td><b>Capacity</b></td><td id="reportExecCap"></td></tr>
+        <tr><td><b>Power</b></td><td id="reportExecPower"></td></tr>
+        <tr><td><b>Investment</b></td><td id="reportExecCost"></td></tr>
+        <tr><td><b>Annual fixed savings</b></td><td id="reportExecAnnualFix"></td></tr>
+        <tr><td><b>Annual dynamic savings</b></td><td id="reportExecAnnualDyn"></td></tr>
+        <tr><td><b>Fixed ROI</b></td><td id="reportExecRoiFix"></td></tr>
+        <tr><td><b>Dynamic ROI</b></td><td id="reportExecRoiDyn"></td></tr>
+        <tr><td><b>Battery lifetime</b></td><td id="reportExecLifetime"></td></tr>
+        <tr><td><b>Peak reduction</b></td><td id="reportExecPeakReduction"></td></tr>
+      </table>
+    </div>
+
+    <div class="reportCard">
+      <h2>Inputs</h2>
+      <table>
+        <tr><td><b>Period</b></td><td id="reportPeriod"></td></tr>
+        <tr><td><b>Battery mode</b></td><td id="reportMode"></td></tr>
+        <tr><td><b>Priority export charging</b></td><td id="reportPriorityExport"></td></tr>
+        <tr><td><b>Forecast optimisation</b></td><td id="reportForecast"></td></tr>
+        <tr><td><b>Pricing model</b></td><td id="reportPricingModel"></td></tr>
+        <tr><td><b>Family preset</b></td><td id="reportFamilyPreset"></td></tr>
+        <tr><td><b>Grid tariff</b></td><td id="reportGridTariff"></td></tr>
+        <tr><td><b>CSV hours</b></td><td id="reportDataHours"></td></tr>
+        <tr><td><b>Price hours available</b></td><td id="reportPriceHours"></td></tr>
+      </table>
+    </div>
+  </div>
 
   <h2>Main results</h2>
   <table>
@@ -461,30 +490,64 @@
     <tr><td><b>Dynamic ROI</b></td><td id="reportRecRoiDyn"></td></tr>
   </table>
 
-  
-<h2>Graphs</h2>
+  <div class="reportPageBreak"></div>
 
-<h3>Import / Export</h3>
-<img id="reportChartMain" style="width:100%;max-width:900px;margin-bottom:20px;">
+  <h2>Monthly energy breakdown</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Month</th><th>Import before</th><th>Import after</th><th>Export before</th><th>Export after</th><th>Battery charge</th><th>Battery discharge</th>
+      </tr>
+    </thead>
+    <tbody id="reportMonthlyEnergyBody"></tbody>
+  </table>
 
-<h3>Battery operation</h3>
-<img id="reportChartOutput" style="width:100%;max-width:900px;margin-bottom:20px;">
+  <h2>Monthly peak tariff analysis</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Month</th><th>Peak before</th><th>Peak after</th><th>Reduction</th><th>Peak cost after</th>
+      </tr>
+    </thead>
+    <tbody id="reportMonthlyPeakBody"></tbody>
+  </table>
 
-<h3>Savings vs capacity</h3>
-<img id="reportChartSavings" style="width:100%;max-width:900px;margin-bottom:20px;">
+  <div class="reportPageBreak"></div>
 
-<h3>ROI vs capacity</h3>
-<img id="reportChartROI" style="width:100%;max-width:900px;margin-bottom:20px;">
+  <h2>Graphs</h2>
 
-<h3>Battery charge / discharge heatmap</h3>
-<img id="reportChartHeatmap" style="width:100%;max-width:900px;margin-bottom:20px;">
+  <h3>Import / Export</h3>
+  <img id="reportChartMain" style="width:100%;max-width:900px;margin-bottom:20px;">
 
-<h2>Notes</h2>
+  <h3>Battery operation</h3>
+  <img id="reportChartOutput" style="width:100%;max-width:900px;margin-bottom:20px;">
+
+  <h3>Peak shaving profile</h3>
+  <img id="reportChartPeak" style="width:100%;max-width:900px;margin-bottom:20px;">
+
+  <h3>Savings vs capacity</h3>
+  <img id="reportChartSavings" style="width:100%;max-width:900px;margin-bottom:20px;">
+
+  <h3>ROI vs capacity</h3>
+  <img id="reportChartROI" style="width:100%;max-width:900px;margin-bottom:20px;">
+
+  <h3>Battery charge / discharge heatmap</h3>
+  <img id="reportChartHeatmap" style="width:100%;max-width:900px;margin-bottom:20px;">
+
+  <div class="reportPageBreak"></div>
+
+  <h2>Notes</h2>
   <div id="reportNotes"></div>
+
+  <h2>Report metadata</h2>
+  <table>
+    <tr><td><b>UI version</b></td><td id="reportMetaVersion"></td></tr>
+    <tr><td><b>Generated at</b></td><td id="reportMetaGenerated"></td></tr>
+    <tr><td><b>Timezone</b></td><td id="reportMetaTimezone"></td></tr>
+  </table>
 </div>
 
-
-<div id="versionPopup" class="versionPopup hidden">
+<div id="versionPopup" class="versionPopup hidden"> class="versionPopup hidden">
   <h3>Version Information</h3>
   <table>
     <tr><td>UI</td><td id="verUI"></td></tr>
