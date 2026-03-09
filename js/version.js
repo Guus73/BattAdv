@@ -1,6 +1,6 @@
 
 window.VERSION = {
-  ui: "2.10.3",
+  ui: "2.11.2",
   simulation: "1.4.0",
   batteryModel: "1.6.0",
   heatmap: "1.2.0",

@@ -57,7 +57,7 @@ const { DateTime } = luxon;
 const el = Object.fromEntries([
   "consFile","colDate","colValue","colType","colTariff","tz","agg","from","to","ean",
   "bzn","priceUrl","copyUrl","priceFile","priceInfo",
-  "fixedPrice","feedInFixed","dynMarkup","feedInDyn","batMode","cap","pmax","rte","soc0","socMin","cycleLife","gridTariff","pricingModel","modularFamily","phaseSetup","baseCapacity","baseUnitPower","moduleCapacity","accessoryCost","stackPrice1","stackPrice2","stackPrice3","stackPrice4","stackPrice5","stackPrice6","applyModular","updateFamilyPreset","resetFamilyPreset","exportFamilyPresets","importFamilyPresetsBtn","importFamilyPresetsFile","pricesExVat","familyPresetStatus","familyPresetExportDialog","familyPresetExportText","copyFamilyPresetExport","downloadFamilyPresetExport","closeFamilyPresetExport","modularSummary","tieredPricingBox","modularPricingBox",
+  "fixedPrice","feedInFixed","dynMarkup","feedInDyn","batMode","cap","pmax","rte","soc0","socMin","cycleLife","gridTariff","pricingModel","modularFamily","phaseSetup","baseCapacity","baseUnitPower","moduleCapacity","accessoryCost","stackPrice1","stackPrice2","stackPrice3","stackPrice4","stackPrice5","stackPrice6","applyModular","updateFamilyPreset","addFamilySystem","deleteFamilySystem","resetFamilyPreset","exportFamilyPresets","importFamilyPresetsBtn","importFamilyPresetsFile","pricesExVat","familyPresetStatus","familyPresetExportDialog","familyPresetExportText","copyFamilyPresetExport","downloadFamilyPresetExport","closeFamilyPresetExport","familySystemDialog","familySystemId","familySystemLabel","familySystemBrand","familySystemBasePower","familySystemBaseCapacity","familySystemModuleCapacity","familySystemPrice1","familySystemPrice2","familySystemPrice3","familySystemPrice4","familySystemPrice5","familySystemPrice6","saveFamilySystem","closeFamilySystemDialog","modularSummary","tieredPricingBox","modularPricingBox",
   "priorityExport","optForecast","optMode","optWindowH","runSim","generatePdfBtn","savePreset","loadPreset","loadPresetFile",
   "tier1","tier2","tier3","batFixedCost",
   "sweepMaxCap","sweepStepCap","sweepMaxKw","sweepStepKw","autoObj","roiScale","runSweep","applyRecommended",
@@ -337,7 +337,36 @@ function getVatFactor(){
 
 
 let customFamilyOverrides = {};
+
 const FAMILY_PRESET_STORAGE_KEY = "energyUI_family_presets_v1";
+const USER_FAMILY_SYSTEMS_KEY = "energyUI_user_family_systems_v1";
+
+function getBuiltInFamilies(){
+  return {
+    custom: { label:"Custom", brand:"Custom", user:false },
+    zendure_solarflow_1600_ac_plus: { brand:"Zendure", label:"SolarFlow 1600 AC+", baseCapacity:2.4, moduleCapacity:1.92, baseUnitPower:1.6, prices:[969,1458,1947,2436,2925,3414], user:false },
+    zendure_solarflow_2400_ac_plus: { brand:"Zendure", label:"SolarFlow 2400 AC+", baseCapacity:2.4, moduleCapacity:2.88, baseUnitPower:2.4, prices:[1918.29,2647.29,3376.29,4105.29,4834.29,5563.29], user:false },
+    zendure_solarflow_2400_ac: { brand:"Zendure", label:"SolarFlow 2400 AC", baseCapacity:0, moduleCapacity:2.88, baseUnitPower:2.4, prices:[1419,2239,3059,3879,4699,5519], user:false },
+    zendure_hyper_2000: { brand:"Zendure", label:"Hyper 2000", baseCapacity:0, moduleCapacity:1.92, baseUnitPower:0.8, prices:[978,1467,1956,2445,2934,3423], user:false },
+    zendure_hub_2000: { brand:"Zendure", label:"SolarFlow Hub 2000", baseCapacity:0, moduleCapacity:1.92, baseUnitPower:0.8, prices:[888,1377,1866,2355,2844,3333], user:false },
+    zendure_solarflow_800: { brand:"Zendure", label:"SolarFlow 800", baseCapacity:0, moduleCapacity:1.92, baseUnitPower:0.8, prices:[738,1227,1716,2205,2694,3183], user:false },
+    indevolt_powerflex_2000: { brand:"Indevolt", label:"PowerFlex 2000", baseCapacity:2.0, moduleCapacity:2.0, baseUnitPower:2.4, prices:[650,1180,1710,2239,2769,3299], user:false },
+    indevolt_solidflex_2000: { brand:"Indevolt", label:"SolidFlex 2000", baseCapacity:1.8, moduleCapacity:1.8, baseUnitPower:2.4, prices:[518,1106,1694,2281,2869,3457], user:false },
+    anker_solix_f3800: { brand:"Anker SOLIX", label:"F3800", baseCapacity:3.84, moduleCapacity:3.84, baseUnitPower:6.0, prices:[2999,5599,8199,10799,13399,15999], user:false },
+    ecoflow_powerocean_single_phase: { brand:"EcoFlow", label:"PowerOcean Single-Phase", baseCapacity:5.0, moduleCapacity:5.0, baseUnitPower:6.0, prices:[4500,8500,12500,16500,20500,24500], user:false },
+    ecoflow_powerocean_three_phase: { brand:"EcoFlow", label:"PowerOcean Three-Phase", baseCapacity:5.0, moduleCapacity:5.0, baseUnitPower:12.0, prices:[7500,11500,15500,19500,23500,27500], user:false },
+    bluetti_ac300_b300: { brand:"Bluetti", label:"AC300 + B300", baseCapacity:3.072, moduleCapacity:3.072, baseUnitPower:3.0, prices:[3499,5999,8499,10999,13499,15999], user:false },
+    bluetti_ac500_b300s: { brand:"Bluetti", label:"AC500 + B300S", baseCapacity:3.072, moduleCapacity:3.072, baseUnitPower:5.0, prices:[4499,7499,10499,13499,16499,19499], user:false },
+    tesla_powerwall_parallel: { brand:"Tesla", label:"Powerwall parallel", baseCapacity:13.5, moduleCapacity:13.5, baseUnitPower:5.0, prices:[8500,17000,25500,34000,42500,51000], user:false }
+  };
+}
+
+let userFamilySystems = {};
+
+function getAllFamilies(){
+  const builtins = getBuiltInFamilies();
+  return Object.assign({}, builtins, userFamilySystems);
+}
 
 function saveFamilyPresetOverrides(){
   try{
@@ -351,15 +380,32 @@ function saveFamilyPresetOverrides(){
 function loadFamilyPresetOverrides(){
   try{
     const raw = localStorage.getItem(FAMILY_PRESET_STORAGE_KEY);
-    if (raw){
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === "object"){
-        customFamilyOverrides = parsed;
-      }
-    }
+    const parsed = raw ? JSON.parse(raw) : {};
+    customFamilyOverrides = (parsed && typeof parsed === "object") ? parsed : {};
   }catch(e){
     console.warn("Failed to load family preset overrides", e);
     customFamilyOverrides = {};
+  }
+}
+
+function saveUserFamilySystems(){
+  try{
+    localStorage.setItem(USER_FAMILY_SYSTEMS_KEY, JSON.stringify(userFamilySystems));
+    renderModularFamilyOptions();
+    updateFamilyPresetStatus();
+  }catch(e){
+    console.warn("Failed to save user family systems", e);
+  }
+}
+
+function loadUserFamilySystems(){
+  try{
+    const raw = localStorage.getItem(USER_FAMILY_SYSTEMS_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    userFamilySystems = (parsed && typeof parsed === "object") ? parsed : {};
+  }catch(e){
+    console.warn("Failed to load user family systems", e);
+    userFamilySystems = {};
   }
 }
 
@@ -369,6 +415,71 @@ function deleteFamilyPresetOverride(fam){
     delete customFamilyOverrides[fam];
     saveFamilyPresetOverrides();
   }
+}
+
+function isUserFamily(fam){
+  return !!(userFamilySystems && userFamilySystems[fam]);
+}
+
+function collectCurrentFamilyValues(){
+  return {
+    baseCapacity: Number(el.baseCapacity ? el.baseCapacity.value : 0) || 0,
+    moduleCapacity: Number(el.moduleCapacity ? el.moduleCapacity.value : 0) || 0,
+    baseUnitPower: Number(el.baseUnitPower ? el.baseUnitPower.value : 0) || 0,
+    accessoryCost: Number(el.accessoryCost ? el.accessoryCost.value : 0) || 0,
+    batFixedCost: Number(el.batFixedCost ? el.batFixedCost.value : 0) || 0,
+    pricesExVat: !!(el.pricesExVat && el.pricesExVat.checked),
+    prices: [
+      Number(el.stackPrice1 ? el.stackPrice1.value : 0) || 0,
+      Number(el.stackPrice2 ? el.stackPrice2.value : 0) || 0,
+      Number(el.stackPrice3 ? el.stackPrice3.value : 0) || 0,
+      Number(el.stackPrice4 ? el.stackPrice4.value : 0) || 0,
+      Number(el.stackPrice5 ? el.stackPrice5.value : 0) || 0,
+      Number(el.stackPrice6 ? el.stackPrice6.value : 0) || 0
+    ]
+  };
+}
+
+function getEffectiveExportSystems(){
+  const builtins = getBuiltInFamilies();
+  const systems = Object.assign({}, userFamilySystems);
+  Object.keys(customFamilyOverrides || {}).forEach(function(key){
+    const base = builtins[key] || systems[key] || { label:key, brand:"User systems", user:true };
+    systems[key] = Object.assign({}, base, customFamilyOverrides[key]);
+  });
+  return systems;
+}
+
+function renderModularFamilyOptions(){
+  if (!el.modularFamily) return;
+  const current = el.modularFamily.value || "custom";
+  const fams = getAllFamilies();
+  const groups = {};
+  Object.keys(fams).forEach(function(key){
+    if (key === "custom"){
+      groups["Custom"] = groups["Custom"] || [];
+      groups["Custom"].push({ key:key, label:fams[key].label || "Custom" });
+      return;
+    }
+    const brand = fams[key].brand || "Other";
+    groups[brand] = groups[brand] || [];
+    groups[brand].push({ key:key, label:fams[key].label || key });
+  });
+  const order = Object.keys(groups).sort(function(a,b){
+    if (a==="Custom") return -1;
+    if (b==="Custom") return 1;
+    if (a==="User systems") return 1;
+    if (b==="User systems") return -1;
+    return a.localeCompare(b);
+  });
+  el.modularFamily.innerHTML = order.map(function(group){
+    const options = groups[group].sort(function(a,b){ return a.label.localeCompare(b.label); }).map(function(item){
+      return '<option value="' + escapeHtml(item.key) + '">' + escapeHtml(item.label) + '</option>';
+    }).join("");
+    return '<optgroup label="' + escapeHtml(group) + '">' + options + '</optgroup>';
+  }).join("");
+  if (Object.prototype.hasOwnProperty.call(fams, current)) el.modularFamily.value = current;
+  else el.modularFamily.value = "custom";
 }
 
 let familyPresetExportUrl = null;
@@ -430,11 +541,9 @@ async function saveFamilyPresetFile(jsonText, filename){
   document.body.appendChild(a);
   a.click();
   a.remove();
-  setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
+  setTimeout(()=>URL.revokeObjectURL(url), 2000);
   return "downloaded";
 }
-
-
 function updateFamilyPresetStatus(){
   if (!el.familyPresetStatus || !el.modularFamily) return;
   const fam = el.modularFamily.value;
@@ -442,10 +551,14 @@ function updateFamilyPresetStatus(){
     el.familyPresetStatus.textContent = "Custom family: no persistent preset selected.";
     return;
   }
-  if (customFamilyOverrides && customFamilyOverrides[fam]){
-    el.familyPresetStatus.innerHTML = "Stored override active for <b>" + fam + "</b> and persisted in this browser.";
+  const families = getAllFamilies();
+  const info = families[fam] || {};
+  if (isUserFamily(fam)){
+    el.familyPresetStatus.innerHTML = "User system active: <b>" + escapeHtml(info.label || fam) + "</b> (" + escapeHtml(info.brand || "User systems") + ").";
+  } else if (customFamilyOverrides && customFamilyOverrides[fam]){
+    el.familyPresetStatus.innerHTML = "Stored override active for <b>" + escapeHtml(info.label || fam) + "</b> and persisted in this browser.";
   } else {
-    el.familyPresetStatus.innerHTML = "Using built-in preset for <b>" + fam + "</b>.";
+    el.familyPresetStatus.innerHTML = "Using built-in preset for <b>" + escapeHtml(info.label || fam) + "</b>.";
   }
 }
 
@@ -523,29 +636,20 @@ function batteryCostEUR(cap){
 function applyModularFamilyPreset(){
   if (!el.modularFamily) return;
   const fam = el.modularFamily.value;
+  const families = getAllFamilies();
+  var p = customFamilyOverrides[fam] || families[fam];
 
-  const presetMap = {
-    custom: null,
-    zendure_solarflow_1600_ac_plus: { baseCapacity:2.4, moduleCapacity:1.92, baseUnitPower:1.6, prices:[969,1458,1947,2436,2925,3414] },
-    zendure_solarflow_2400_ac_plus: { baseCapacity:2.4, moduleCapacity:2.88, baseUnitPower:2.4, prices:[1918.29,2647.29,3376.29,4105.29,4834.29,5563.29] },
-    zendure_solarflow_2400_ac: { baseCapacity:0, moduleCapacity:2.88, baseUnitPower:2.4, prices:[1419,2239,3059,3879,4699,5519] },
-    zendure_hyper_2000: { baseCapacity:0, moduleCapacity:1.92, baseUnitPower:0.8, prices:[978,1467,1956,2445,2934,3423] },
-    zendure_hub_2000: { baseCapacity:0, moduleCapacity:1.92, baseUnitPower:0.8, prices:[888,1377,1866,2355,2844,3333] },
-    zendure_solarflow_800: { baseCapacity:0, moduleCapacity:1.92, baseUnitPower:0.8, prices:[738,1227,1716,2205,2694,3183] },
-    indevolt_powerflex_2000: { baseCapacity:2.0, moduleCapacity:2.0, baseUnitPower:2.4, prices:[650,1180,1710,2239,2769,3299] },
-    indevolt_solidflex_2000: { baseCapacity:1.8, moduleCapacity:1.8, baseUnitPower:2.4, prices:[518,1106,1694,2281,2869,3457] }
-  };
-
-  var p = customFamilyOverrides[fam] || presetMap[fam];
   if (p){
-    if (el.baseCapacity) el.baseCapacity.value = String(p.baseCapacity);
-    if (el.moduleCapacity) el.moduleCapacity.value = String(p.moduleCapacity);
-    if (el.baseUnitPower) el.baseUnitPower.value = String(p.baseUnitPower);
+    if (el.baseCapacity && p.baseCapacity !== undefined) el.baseCapacity.value = String(p.baseCapacity);
+    if (el.moduleCapacity && p.moduleCapacity !== undefined) el.moduleCapacity.value = String(p.moduleCapacity);
+    if (el.baseUnitPower && p.baseUnitPower !== undefined) el.baseUnitPower.value = String(p.baseUnitPower);
     if (el.accessoryCost && p.accessoryCost !== undefined) el.accessoryCost.value = String(p.accessoryCost);
     if (el.batFixedCost && p.batFixedCost !== undefined) el.batFixedCost.value = String(p.batFixedCost);
     if (el.pricesExVat && p.pricesExVat !== undefined) el.pricesExVat.checked = !!p.pricesExVat;
-    for (var i=1;i<=6;i++){
-      if (el["stackPrice"+i]) el["stackPrice"+i].value = String(p.prices[i-1]);
+    if (Array.isArray(p.prices)){
+      for (var i=1;i<=6;i++){
+        if (el["stackPrice"+i]) el["stackPrice"+i].value = String(p.prices[i-1] !== undefined ? p.prices[i-1] : 0);
+      }
     }
   }
   updatePricingUI();
@@ -2221,28 +2325,105 @@ if (el.updateFamilyPreset){
       alert("Select a family preset first.");
       return;
     }
-    customFamilyOverrides[fam] = {
-      baseCapacity: Number(el.baseCapacity ? el.baseCapacity.value : 0) || 0,
-      moduleCapacity: Number(el.moduleCapacity ? el.moduleCapacity.value : 0) || 0,
-      baseUnitPower: Number(el.baseUnitPower ? el.baseUnitPower.value : 0) || 0,
-      accessoryCost: Number(el.accessoryCost ? el.accessoryCost.value : 0) || 0,
-      batFixedCost: Number(el.batFixedCost ? el.batFixedCost.value : 0) || 0,
-      pricesExVat: !!(el.pricesExVat && el.pricesExVat.checked),
-      prices: [
-        Number(el.stackPrice1 ? el.stackPrice1.value : 0) || 0,
-        Number(el.stackPrice2 ? el.stackPrice2.value : 0) || 0,
-        Number(el.stackPrice3 ? el.stackPrice3.value : 0) || 0,
-        Number(el.stackPrice4 ? el.stackPrice4.value : 0) || 0,
-        Number(el.stackPrice5 ? el.stackPrice5.value : 0) || 0,
-        Number(el.stackPrice6 ? el.stackPrice6.value : 0) || 0
-      ]
-    };
+
+    var values = collectCurrentFamilyValues();
+
+    if (isUserFamily(fam)){
+      userFamilySystems[fam] = Object.assign({}, userFamilySystems[fam] || {}, values);
+      if (customFamilyOverrides && customFamilyOverrides[fam]) delete customFamilyOverrides[fam];
+      saveUserFamilySystems();
+      saveFamilyPresetOverrides();
+      renderModularFamilyOptions();
+      if (el.modularFamily) el.modularFamily.value = fam;
+      applyModularFamilyPreset();
+      alert("User system updated and stored in this browser.");
+      return;
+    }
+
+    customFamilyOverrides[fam] = values;
     saveFamilyPresetOverrides();
     updatePricingUI();
-    alert("Family preset updated and stored in this browser, including accessory / fixed cost and excl. btw setting.");
+    updateFamilyPresetStatus();
+    alert("Family preset override updated and stored in this browser.");
   });
 }
 
+
+
+if (el.addFamilySystem){
+  el.addFamilySystem.addEventListener("click", function(){
+    if (el.familySystemId) el.familySystemId.value = "";
+    if (el.familySystemLabel) el.familySystemLabel.value = "";
+    if (el.familySystemBrand) el.familySystemBrand.value = "User systems";
+    if (el.familySystemBasePower) el.familySystemBasePower.value = el.baseUnitPower ? el.baseUnitPower.value : "2.0";
+    if (el.familySystemBaseCapacity) el.familySystemBaseCapacity.value = el.baseCapacity ? el.baseCapacity.value : "2.0";
+    if (el.familySystemModuleCapacity) el.familySystemModuleCapacity.value = el.moduleCapacity ? el.moduleCapacity.value : "2.0";
+    for (var i=1;i<=6;i++){
+      if (el["familySystemPrice"+i] && el["stackPrice"+i]) el["familySystemPrice"+i].value = el["stackPrice"+i].value;
+    }
+    if (el.familySystemDialog && typeof el.familySystemDialog.showModal === "function") el.familySystemDialog.showModal();
+  });
+}
+
+if (el.deleteFamilySystem){
+  el.deleteFamilySystem.addEventListener("click", function(){
+    if (!el.modularFamily) return;
+    var fam = el.modularFamily.value;
+    if (!isUserFamily(fam)){
+      alert("Selected family is not a user system.");
+      return;
+    }
+    delete userFamilySystems[fam];
+    deleteFamilyPresetOverride(fam);
+    saveUserFamilySystems();
+    renderModularFamilyOptions();
+    el.modularFamily.value = "custom";
+    applyModularFamilyPreset();
+    alert("User system deleted.");
+  });
+}
+
+if (el.saveFamilySystem){
+  el.saveFamilySystem.addEventListener("click", function(){
+    var id = (el.familySystemId ? el.familySystemId.value : "").trim().toLowerCase().replace(/[^a-z0-9_]+/g, "_");
+    var label = (el.familySystemLabel ? el.familySystemLabel.value : "").trim();
+    var brand = (el.familySystemBrand ? el.familySystemBrand.value : "").trim() || "User systems";
+    if (!id || !label){
+      alert("System id and display name are required.");
+      return;
+    }
+    userFamilySystems[id] = {
+      brand: brand,
+      label: label,
+      baseCapacity: Number(el.familySystemBaseCapacity ? el.familySystemBaseCapacity.value : 0) || 0,
+      moduleCapacity: Number(el.familySystemModuleCapacity ? el.familySystemModuleCapacity.value : 0) || 0,
+      baseUnitPower: Number(el.familySystemBasePower ? el.familySystemBasePower.value : 0) || 0,
+      accessoryCost: 0,
+      batFixedCost: 0,
+      prices: [
+        Number(el.familySystemPrice1 ? el.familySystemPrice1.value : 0) || 0,
+        Number(el.familySystemPrice2 ? el.familySystemPrice2.value : 0) || 0,
+        Number(el.familySystemPrice3 ? el.familySystemPrice3.value : 0) || 0,
+        Number(el.familySystemPrice4 ? el.familySystemPrice4.value : 0) || 0,
+        Number(el.familySystemPrice5 ? el.familySystemPrice5.value : 0) || 0,
+        Number(el.familySystemPrice6 ? el.familySystemPrice6.value : 0) || 0,
+      ],
+      user: true
+    };
+    saveUserFamilySystems();
+    renderModularFamilyOptions();
+    if (el.modularFamily) el.modularFamily.value = id;
+    applyModularFamilyPreset();
+    if (el.familySystemDialog && typeof el.familySystemDialog.close === "function") el.familySystemDialog.close();
+    alert("Battery system saved.");
+  });
+}
+
+if (el.closeFamilySystemDialog){
+  el.closeFamilySystemDialog.addEventListener("click", function(){
+    if (el.familySystemDialog && typeof el.familySystemDialog.close === "function") el.familySystemDialog.close();
+  });
+}
 
 if (el.resetFamilyPreset){
   el.resetFamilyPreset.addEventListener("click", function(){
@@ -2263,7 +2444,8 @@ if (el.exportFamilyPresets){
     var payload = {
       version: 1,
       exported_at: new Date().toISOString(),
-      presets: customFamilyOverrides
+      presets: customFamilyOverrides,
+      systems: getEffectiveExportSystems()
     };
     var jsonText = JSON.stringify(payload, null, 2);
     try{
@@ -2285,12 +2467,16 @@ if (el.importFamilyPresetsBtn && el.importFamilyPresetsFile){
     try{
       var txt = await f.text();
       var data = JSON.parse(txt);
-      var incoming = data && data.presets ? data.presets : data;
-      if (!incoming || typeof incoming !== "object") throw new Error("Invalid preset file");
-      customFamilyOverrides = Object.assign({}, customFamilyOverrides, incoming);
+      var incomingPresets = data && data.presets ? data.presets : data;
+      var incomingSystems = data && data.systems ? data.systems : {};
+      if (!incomingPresets || typeof incomingPresets !== "object") throw new Error("Invalid preset file");
+      customFamilyOverrides = Object.assign({}, customFamilyOverrides, incomingPresets);
+      if (incomingSystems && typeof incomingSystems === "object") userFamilySystems = Object.assign({}, userFamilySystems, incomingSystems);
       saveFamilyPresetOverrides();
+      saveUserFamilySystems();
+      renderModularFamilyOptions();
       applyModularFamilyPreset();
-      alert("Family presets imported successfully.");
+      alert("Family presets and systems imported successfully.");
     }catch(e){
       alert("Import failed: " + e.message);
     }finally{
@@ -2322,6 +2508,8 @@ if (el.closeFamilyPresetExport){
 
 // init
 loadFamilyPresetOverrides();
+loadUserFamilySystems();
+renderModularFamilyOptions();
 if (el.modularFamily) applyModularFamilyPreset();
 updatePricingUI();
 updatePriceUrl();
