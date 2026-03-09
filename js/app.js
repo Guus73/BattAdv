@@ -1,4 +1,102 @@
 
+function monthKeyFromMillis(ms){
+  return DateTime.fromMillis(ms, {zone:el.tz.value}).toFormat("yyyy-LL");
+}
+
+function monthLabelFromKey(k){
+  const dt = DateTime.fromFormat(k, "yyyy-LL", {zone:el.tz.value});
+  return dt.isValid ? dt.toFormat("LLL yyyy") : k;
+}
+
+function buildMonthlyReportTables(timeline){
+  const months = new Map();
+  const tariff = Number(el.gridTariff ? el.gridTariff.value : 0) || 0;
+  if (!timeline || !timeline.length) return { energyRows:[], peakRows:[] };
+
+  let prevSoc = Number(timeline[0].soc || 0);
+  for (let i=0; i<timeline.length; i++){
+    const p = timeline[i];
+    const key = monthKeyFromMillis(p.t);
+    if (!months.has(key)){
+      months.set(key, {
+        key:key,
+        importBefore:0, importAfter:0,
+        exportBefore:0, exportAfter:0,
+        charge:0, discharge:0,
+        peakBefore:0, peakAfter:0
+      });
+    }
+    const m = months.get(key);
+    m.importBefore += Number(p.import0 || 0);
+    m.importAfter += Number(p.import1 || 0);
+    m.exportBefore += Math.max(0, -Number(p.export0 || 0));
+    m.exportAfter += Math.max(0, -Number(p.export1 || 0));
+    m.peakBefore = Math.max(m.peakBefore, Number(p.import0 || 0));
+    m.peakAfter = Math.max(m.peakAfter, Number(p.import1 || 0));
+
+    const soc = Number(p.soc || 0);
+    const delta = soc - prevSoc;
+    if (i > 0){
+      if (delta > 0) m.charge += delta;
+      if (delta < 0) m.discharge += Math.abs(delta);
+    }
+    prevSoc = soc;
+  }
+
+  const rows = Array.from(months.values()).sort(function(a,b){ return a.key.localeCompare(b.key); });
+  const energyRows = rows.map(function(m){
+    return {
+      month: monthLabelFromKey(m.key),
+      importBefore: m.importBefore,
+      importAfter: m.importAfter,
+      exportBefore: m.exportBefore,
+      exportAfter: m.exportAfter,
+      charge: m.charge,
+      discharge: m.discharge
+    };
+  });
+  const peakRows = rows.map(function(m){
+    return {
+      month: monthLabelFromKey(m.key),
+      peakBefore: m.peakBefore,
+      peakAfter: m.peakAfter,
+      reduction: m.peakBefore - m.peakAfter,
+      costAfter: m.peakAfter * tariff
+    };
+  });
+  return { energyRows:energyRows, peakRows:peakRows };
+}
+
+function renderReportTableBodies(monthly){
+  const energyBody = document.getElementById("reportMonthlyEnergyBody");
+  const peakBody = document.getElementById("reportMonthlyPeakBody");
+  if (energyBody){
+    energyBody.innerHTML = (monthly.energyRows || []).map(function(r){
+      return "<tr>" +
+        "<td>" + escapeHtml(r.month) + "</td>" +
+        "<td>" + r.importBefore.toFixed(1) + " kWh</td>" +
+        "<td>" + r.importAfter.toFixed(1) + " kWh</td>" +
+        "<td>" + r.exportBefore.toFixed(1) + " kWh</td>" +
+        "<td>" + r.exportAfter.toFixed(1) + " kWh</td>" +
+        "<td>" + r.charge.toFixed(1) + " kWh</td>" +
+        "<td>" + r.discharge.toFixed(1) + " kWh</td>" +
+      "</tr>";
+    }).join("");
+  }
+  if (peakBody){
+    peakBody.innerHTML = (monthly.peakRows || []).map(function(r){
+      return "<tr>" +
+        "<td>" + escapeHtml(r.month) + "</td>" +
+        "<td>" + r.peakBefore.toFixed(2) + " kW</td>" +
+        "<td>" + r.peakAfter.toFixed(2) + " kW</td>" +
+        "<td>" + r.reduction.toFixed(2) + " kW</td>" +
+        "<td>" + euro(r.costAfter) + "</td>" +
+      "</tr>";
+    }).join("");
+  }
+}
+
+
 // ---------- monthly peak-aware optimisation ----------
 function getMonthKeyFromMs(ms){
   const d = new Date(ms);
@@ -2054,39 +2152,67 @@ async function runSweepAndRecommend(){
 }
 
 // ---------- PDF report ----------
-function fillPdfReport() {
-  document.getElementById("reportPeriod").textContent =
-    `${el.from.value || "—"} → ${el.to.value || "—"}`;
 
+function fillPdfReport() {
+  const cap = Math.max(0, Number(el.cap ? el.cap.value : 0) || 0);
+  const pmax = Math.max(0, Number(el.pmax ? el.pmax.value : 0) || 0);
+  const run = runSimulationFor(cap, pmax);
+  const metrics = computeBatteryMetrics(run.timeline, cap, Number(el.cycleLife ? el.cycleLife.value : 6000) || 6000);
+  const cost = batteryCostEUR(cap);
+  const saveFix = run.fixed0 - run.fixed1;
+  const annualFix = saveFix * scaleToYear();
+  const roiFix = annualFix > 0 ? cost / annualFix : null;
+  let saveDyn = null, annualDyn = null, roiDyn = null;
+  if (run.dyn0Cost != null && run.dyn1Cost != null){
+    saveDyn = run.dyn0Cost - run.dyn1Cost;
+    annualDyn = saveDyn * scaleToYear();
+    roiDyn = annualDyn > 0 ? cost / annualDyn : null;
+  }
+
+  const all = buildHourlyAll();
+  const hoursInRange = all.filter(function(p){ return inRange(p.t); }).length;
+  let priceHours = 0;
+  if (dynPrices){
+    for (let i=0;i<all.length;i++){
+      if (inRange(all[i].t) && priceAtHourStart(all[i].t) != null) priceHours++;
+    }
+  }
+
+  document.getElementById("reportExecSystem").textContent =
+    (el.pricingModel && el.pricingModel.value === "modular" && el.modularFamily) ? (el.modularFamily.options[el.modularFamily.selectedIndex] ? el.modularFamily.options[el.modularFamily.selectedIndex].text : "Modular system") : "Generic battery";
+  document.getElementById("reportExecCap").textContent = cap ? (cap + " kWh") : "—";
+  document.getElementById("reportExecPower").textContent = pmax ? (pmax + " kW") : "—";
+  document.getElementById("reportExecCost").textContent = euro(cost);
+  document.getElementById("reportExecAnnualFix").textContent = euro(annualFix);
+  document.getElementById("reportExecAnnualDyn").textContent = annualDyn != null ? euro(annualDyn) : "—";
+  document.getElementById("reportExecRoiFix").textContent = roiFix != null ? (roiFix.toFixed(1) + " years") : "—";
+  document.getElementById("reportExecRoiDyn").textContent = roiDyn != null ? (roiDyn.toFixed(1) + " years") : "—";
+  document.getElementById("reportExecLifetime").textContent = metrics.lifetimeYears != null ? (metrics.lifetimeYears.toFixed(1) + " years") : "—";
+  document.getElementById("reportExecPeakReduction").textContent = metrics.peakReduction.toFixed(2) + " kW";
+
+  document.getElementById("reportPeriod").textContent =
+    (el.from.value || "—") + " → " + (el.to.value || "—");
   document.getElementById("reportMode").textContent =
     el.batMode.value === "self" ? "Zelfconsumptie" : (el.batMode.value === "peak" ? "Peak shaving optimisation" : (el.batMode.value === "hybrid_price_peak" ? "Hybrid dynamic price + peak" : (el.batMode.value === "hybrid_self_peak" ? "Hybrid self consumption + peak" : "Dynamisch arbitrage")));
+  document.getElementById("reportPriorityExport").textContent = el.priorityExport.checked ? "Ja" : "Nee";
+  document.getElementById("reportForecast").textContent = el.optForecast.checked ? "Ja" : "Nee";
+  document.getElementById("reportPricingModel").textContent = el.pricingModel ? el.pricingModel.value : "—";
+  document.getElementById("reportFamilyPreset").textContent = (el.modularFamily && el.modularFamily.selectedIndex >= 0) ? el.modularFamily.options[el.modularFamily.selectedIndex].text : "—";
+  document.getElementById("reportGridTariff").textContent = (Number(el.gridTariff ? el.gridTariff.value : 0) || 0).toFixed(2) + " €/kW/month";
+  document.getElementById("reportDataHours").textContent = String(hoursInRange);
+  document.getElementById("reportPriceHours").textContent = dynPrices ? (priceHours + " / " + hoursInRange) : "No dynamic prices";
 
-  document.getElementById("reportPriorityExport").textContent =
-    el.priorityExport.checked ? "Ja" : "Nee";
-
-  document.getElementById("reportForecast").textContent =
-    el.optForecast.checked ? "Ja" : "Nee";
-
-  document.getElementById("reportFixedNoBat").textContent =
-    el.kpiNoBatFixed.textContent || "—";
-
-  document.getElementById("reportFixedBat").textContent =
-    el.kpiWithBatFixed.textContent || "—";
-
-  document.getElementById("reportDynNoBat").textContent =
-    el.kpiNoBatDyn.textContent || "—";
-
-  document.getElementById("reportDynBat").textContent =
-    el.kpiWithBatDyn.textContent || "—";
+  document.getElementById("reportFixedNoBat").textContent = euro(run.fixed0);
+  document.getElementById("reportFixedBat").textContent = euro(run.fixed1);
+  document.getElementById("reportDynNoBat").textContent = run.dyn0Cost != null ? euro(run.dyn0Cost) : "—";
+  document.getElementById("reportDynBat").textContent = run.dyn1Cost != null ? euro(run.dyn1Cost) : "—";
 
   if (lastRecommended) {
-    document.getElementById("reportRecCap").textContent = `${lastRecommended.cap} kWh`;
-    document.getElementById("reportRecPower").textContent = `${lastRecommended.pmax} kW`;
+    document.getElementById("reportRecCap").textContent = String(lastRecommended.cap) + " kWh";
+    document.getElementById("reportRecPower").textContent = String(lastRecommended.pmax) + " kW";
     document.getElementById("reportRecCost").textContent = euro(batteryCostEUR(lastRecommended.cap));
-    document.getElementById("reportRecRoiFix").textContent =
-      lastRecommended.fix?.roi != null ? `${lastRecommended.fix.roi.toFixed(1)} years` : "—";
-    document.getElementById("reportRecRoiDyn").textContent =
-      lastRecommended.dyn?.roi != null ? `${lastRecommended.dyn.roi.toFixed(1)} years` : "—";
+    document.getElementById("reportRecRoiFix").textContent = (lastRecommended.fix && lastRecommended.fix.roi != null) ? (lastRecommended.fix.roi.toFixed(1) + " years") : "—";
+    document.getElementById("reportRecRoiDyn").textContent = (lastRecommended.dyn && lastRecommended.dyn.roi != null) ? (lastRecommended.dyn.roi.toFixed(1) + " years") : "—";
   } else {
     document.getElementById("reportRecCap").textContent = "—";
     document.getElementById("reportRecPower").textContent = "—";
@@ -2095,16 +2221,30 @@ function fillPdfReport() {
     document.getElementById("reportRecRoiDyn").textContent = "—";
   }
 
+  renderReportTableBodies(buildMonthlyReportTables(run.timeline));
+
   document.getElementById("reportNotes").innerHTML =
-    `<div><b>Cycles:</b> ${el.kpiCycles?.textContent || "—"}<br><b>Cycles/year:</b> ${el.kpiCyclesYear?.textContent || "—"}<br><b>Lifetime:</b> ${el.kpiLifetime?.textContent || "—"}<br><b>Peak shaving:</b> ${el.kpiPeakReduction?.textContent || "—"}<br><b>Grid cost estimate:</b> ${(document.getElementById("gridCost")?.textContent) || "—"}</div><br>` + (el.notes.innerHTML || "—");
+    "<div><b>Cycles:</b> " + (el.kpiCycles ? el.kpiCycles.textContent : "—") +
+    "<br><b>Cycles/year:</b> " + (el.kpiCyclesYear ? el.kpiCyclesYear.textContent : "—") +
+    "<br><b>Lifetime:</b> " + (el.kpiLifetime ? el.kpiLifetime.textContent : "—") +
+    "<br><b>Peak shaving:</b> " + (el.kpiPeakReduction ? el.kpiPeakReduction.textContent : "—") +
+    "<br><b>Monthly grid tariff cost:</b> " + euro(calculateMonthlyPeakCost(run.timeline, Number(el.gridTariff ? el.gridTariff.value : 0) || 0)) +
+    "<br><b>Data quality:</b> CSV " + hoursInRange + " h" + (dynPrices ? (" · prices " + priceHours + "/" + hoursInRange + " h") : "") +
+    "</div><br>" + (el.notes ? el.notes.innerHTML : "—");
+
+  document.getElementById("reportMetaVersion").textContent = (window.VERSION && window.VERSION.ui) ? window.VERSION.ui : "unknown";
+  document.getElementById("reportMetaGenerated").textContent = new Date().toLocaleString();
+  document.getElementById("reportMetaTimezone").textContent = el.tz ? el.tz.value : "—";
 }
+
+
 
 
 async function captureChartsForReport(){
 
   async function cap(id){
-    const el=document.getElementById(id);
-    if(!el) return null;
+    const node=document.getElementById(id);
+    if(!node) return null;
     try{
       return await Plotly.toImage(id,{format:"png",width:1000,height:450});
     }catch(e){
@@ -2114,16 +2254,19 @@ async function captureChartsForReport(){
 
   const main=await cap("chart");
   const out=await cap("chart2");
+  const peak=await cap("peakChart");
   const sav=await cap("savingsChart");
   const roi=await cap("roiChart");
   const heat=await cap("heatmapChart");
 
   if(main) document.getElementById("reportChartMain").src=main;
   if(out) document.getElementById("reportChartOutput").src=out;
+  if(peak) document.getElementById("reportChartPeak").src=peak;
   if(sav) document.getElementById("reportChartSavings").src=sav;
   if(roi) document.getElementById("reportChartROI").src=roi;
   if(heat) document.getElementById("reportChartHeatmap").src=heat;
 }
+
 
 function generatePdfReport() {
   fillPdfReport();
