@@ -453,6 +453,10 @@
 <div class="kpi"><span>📈 ROI (dynamic)</span><b id="reportExecRoiDyn"></b></div>
 <div class="kpi"><span>🔁 Battery lifetime</span><b id="reportExecLifetime"></b></div>
 <div class="kpi"><span>⚡ Peak reduction</span><b id="reportExecPeakReduction"></b></div>
+<div class="kpi"><span>💶 Annual fixed savings</span><b id="reportExecAnnualFix"></b></div>
+<div class="kpi"><span>💶 Annual dynamic savings</span><b id="reportExecAnnualDyn"></b></div>
+<div class="kpi"><span>🏠 Self-consumption</span><b id="reportExecSelfConsumption"></b></div>
+<div class="kpi"><span>🏡 Self-sufficiency</span><b id="reportExecSelfSufficiency"></b></div>
 </div>
 </div>
 
@@ -503,14 +507,19 @@
     <tr><td><b>Dynamic with battery</b></td><td id="reportDynBat"></td></tr>
   </table>
 
-  <h2>Recommended battery</h2>
-  <table>
-    <tr><td><b>Recommended capacity</b></td><td id="reportRecCap"></td></tr>
-    <tr><td><b>Recommended power</b></td><td id="reportRecPower"></td></tr>
-    <tr><td><b>Battery cost</b></td><td id="reportRecCost"></td></tr>
-    <tr><td><b>Fixed ROI</b></td><td id="reportRecRoiFix"></td></tr>
-    <tr><td><b>Dynamic ROI</b></td><td id="reportRecRoiDyn"></td></tr>
-  </table>
+  <h2>Battery sizing conclusion</h2>
+  <div class="reportCard">
+    <table>
+      <tr><td><b>Recommended capacity</b></td><td id="reportRecCap"></td></tr>
+      <tr><td><b>Recommended power</b></td><td id="reportRecPower"></td></tr>
+      <tr><td><b>Battery cost</b></td><td id="reportRecCost"></td></tr>
+      <tr><td><b>Fixed ROI</b></td><td id="reportRecRoiFix"></td></tr>
+      <tr><td><b>Dynamic ROI</b></td><td id="reportRecRoiDyn"></td></tr>
+      <tr><td><b>Optimal sizing band</b></td><td id="reportSizingBand"></td></tr>
+      <tr><td><b>Oversizing / undersizing</b></td><td id="reportSizingDelta"></td></tr>
+      <tr><td><b>Estimated ROI impact</b></td><td id="reportSizingImpact"></td></tr>
+    </table>
+  </div>
 
   <div class="reportPageBreak"></div>
 
@@ -518,7 +527,7 @@
   <table>
     <thead>
       <tr>
-        <th>Month</th><th>Import before</th><th>Import after</th><th>Export before</th><th>Export after</th><th>Battery charge</th><th>Battery discharge</th>
+        <th>Month</th><th>Imp. before</th><th>Imp. after</th><th>Exp. before</th><th>Exp. after</th><th>Charge</th><th>Discharge</th>
       </tr>
     </thead>
     <tbody id="reportMonthlyEnergyBody"></tbody>
@@ -586,7 +595,7 @@
 
   <div class="reportPageBreak"></div>
 
-  <h2>Notes</h2>
+  <h2>Insights</h2>
   <div id="reportNotes"></div>
 
   <h2>Report metadata</h2>
