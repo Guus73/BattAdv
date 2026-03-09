@@ -57,11 +57,11 @@ const { DateTime } = luxon;
 const el = Object.fromEntries([
   "consFile","colDate","colValue","colType","colTariff","tz","agg","from","to","ean",
   "bzn","priceUrl","copyUrl","priceFile","priceInfo",
-  "fixedPrice","feedInFixed","dynMarkup","feedInDyn","batMode","cap","pmax","rte","soc0","socMin","cycleLife","gridTariff",
+  "fixedPrice","feedInFixed","dynMarkup","feedInDyn","batMode","cap","pmax","rte","soc0","socMin","cycleLife","gridTariff","pricingModel","modularFamily","phaseSetup","baseCapacity","baseUnitPower","moduleCapacity","accessoryCost","stackPrice1","stackPrice2","stackPrice3","stackPrice4","stackPrice5","stackPrice6","applyModular","updateFamilyPreset","resetFamilyPreset","exportFamilyPresets","importFamilyPresetsBtn","importFamilyPresetsFile","pricesExVat","familyPresetStatus","familyPresetExportDialog","familyPresetExportText","copyFamilyPresetExport","downloadFamilyPresetExport","closeFamilyPresetExport","modularSummary","tieredPricingBox","modularPricingBox",
   "priorityExport","optForecast","optMode","optWindowH","runSim","generatePdfBtn","savePreset","loadPreset","loadPresetFile",
   "tier1","tier2","tier3","batFixedCost",
   "sweepMaxCap","sweepStepCap","sweepMaxKw","sweepStepKw","autoObj","roiScale","runSweep","applyRecommended",
-  "progressBar","progressText","sweepInfo",
+  "progressBar","progressText","sweepInfo","modularSweepPickerWrap","modularSweepPicker","applySweepSelection",
   "kpiEnergy","kpiPeak","kpiCycles","kpiCyclesYear","kpiLifetime","kpiPeakReduction","kpiNoBatFixed","kpiNoBatDyn","kpiWithBatFixed","kpiWithBatDyn",
   "notes"
 ].map(id => [id, document.getElementById(id)]));
@@ -71,6 +71,7 @@ let consCols = [];
 let dynPrices = null;
 let hourlyAllCache = null;
 let lastRecommended = null;
+let lastModularSweepResults = [];
 
 // ---------- helpers ----------
 function euro(x){ return Number.isFinite(x) ? new Intl.NumberFormat(undefined,{style:"currency",currency:"EUR"}).format(x) : "—"; }
@@ -320,7 +321,191 @@ function costDynamicSeries(impSeries, expSeries, markup, feedInDyn){
 }
 
 // ---------- battery cost ----------
+function getPhaseCount(){
+  return Math.max(1, Number(el.phaseSetup ? el.phaseSetup.value : 1) || 1);
+}
+
+function getRawStackPrice(height){
+  const key = "stackPrice" + height;
+  const node = el[key];
+  return Math.max(0, Number(node ? node.value : 0) || 0);
+}
+
+function getVatFactor(){
+  return (el.pricesExVat && el.pricesExVat.checked) ? 0.79 : 1.0;
+}
+
+
+let customFamilyOverrides = {};
+const FAMILY_PRESET_STORAGE_KEY = "energyUI_family_presets_v1";
+
+function saveFamilyPresetOverrides(){
+  try{
+    localStorage.setItem(FAMILY_PRESET_STORAGE_KEY, JSON.stringify(customFamilyOverrides));
+    updateFamilyPresetStatus();
+  }catch(e){
+    console.warn("Failed to save family preset overrides", e);
+  }
+}
+
+function loadFamilyPresetOverrides(){
+  try{
+    const raw = localStorage.getItem(FAMILY_PRESET_STORAGE_KEY);
+    if (raw){
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object"){
+        customFamilyOverrides = parsed;
+      }
+    }
+  }catch(e){
+    console.warn("Failed to load family preset overrides", e);
+    customFamilyOverrides = {};
+  }
+}
+
+function deleteFamilyPresetOverride(fam){
+  if (!fam || fam === "custom") return;
+  if (customFamilyOverrides && customFamilyOverrides[fam]){
+    delete customFamilyOverrides[fam];
+    saveFamilyPresetOverrides();
+  }
+}
+
+let familyPresetExportUrl = null;
+
+function openFamilyPresetExportDialog(filename, dataObj){
+  const jsonText = JSON.stringify(dataObj, null, 2);
+  const blob = new Blob([jsonText], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+
+  if (familyPresetExportUrl){
+    try{ URL.revokeObjectURL(familyPresetExportUrl); }catch(e){}
+  }
+  familyPresetExportUrl = url;
+
+  if (el.familyPresetExportText) el.familyPresetExportText.value = jsonText;
+  if (el.downloadFamilyPresetExport){
+    el.downloadFamilyPresetExport.href = url;
+    el.downloadFamilyPresetExport.download = filename;
+  }
+
+  if (el.familyPresetExportDialog && typeof el.familyPresetExportDialog.showModal === "function"){
+    el.familyPresetExportDialog.showModal();
+  } else {
+    window.prompt("Copy preset JSON:", jsonText);
+  }
+}
+async function saveFamilyPresetFile(jsonText, filename){
+  if (window.showSaveFilePicker) {
+    const handle = await window.showSaveFilePicker({
+      suggestedName: filename,
+      types: [{
+        description: "JSON preset",
+        accept: { "application/json": [".json"] }
+      }]
+    });
+    const writable = await handle.createWritable();
+    await writable.write(jsonText);
+    await writable.close();
+    return "saved";
+  }
+
+  try {
+    const file = new File([jsonText], filename, {type:"application/json"});
+    if (navigator.canShare && navigator.canShare({ files:[file] }) && navigator.share) {
+      await navigator.share({ files:[file] });
+      return "shared";
+    }
+  } catch (err) {
+    console.warn("Share fallback failed", err);
+  }
+
+  const blob = new Blob([jsonText], {type:"application/json"});
+  const a = document.createElement("a");
+  const url = URL.createObjectURL(blob);
+  a.href = url;
+  a.download = filename;
+  a.rel = "noopener";
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
+  return "downloaded";
+}
+
+
+function updateFamilyPresetStatus(){
+  if (!el.familyPresetStatus || !el.modularFamily) return;
+  const fam = el.modularFamily.value;
+  if (!fam || fam === "custom"){
+    el.familyPresetStatus.textContent = "Custom family: no persistent preset selected.";
+    return;
+  }
+  if (customFamilyOverrides && customFamilyOverrides[fam]){
+    el.familyPresetStatus.innerHTML = "Stored override active for <b>" + fam + "</b> and persisted in this browser.";
+  } else {
+    el.familyPresetStatus.innerHTML = "Using built-in preset for <b>" + fam + "</b>.";
+  }
+}
+
+
+function getStackPrice(height){
+  return getRawStackPrice(height) * getVatFactor();
+}
+
+function getModularConfigExplicit(phaseCount, stackHeight, requestedCap){
+  phaseCount = Math.max(1, Number(phaseCount) || 1);
+  stackHeight = Math.max(1, Math.min(6, Number(stackHeight) || 1));
+
+  const baseCapacity = Math.max(0, Number(el.baseCapacity ? el.baseCapacity.value : 0) || 0);
+  const moduleCapacity = Math.max(0.01, Number(el.moduleCapacity ? el.moduleCapacity.value : 0.01) || 0.01);
+  const baseUnitPower = Math.max(0, Number(el.baseUnitPower ? el.baseUnitPower.value : 0) || 0);
+  const accessory = Math.max(0, Number(el.accessoryCost ? el.accessoryCost.value : 0) || 0);
+  const fixed = Math.max(0, Number(el.batFixedCost ? el.batFixedCost.value : 0) || 0);
+
+  const perStackCapacity = baseCapacity + (stackHeight - 1) * moduleCapacity;
+  const snappedCapacity = phaseCount * perStackCapacity;
+  const totalPower = phaseCount * baseUnitPower;
+  const selectedStackPrice = getStackPrice(stackHeight); // complete stack price for this height
+  const totalCost = (phaseCount * selectedStackPrice) + accessory + fixed;
+  const totalModules = phaseCount * Math.max(0, stackHeight - 1);
+
+  return {
+    phaseCount: phaseCount,
+    stackHeight: stackHeight,
+    modules: totalModules,
+    requestedCapacity: Math.max(0, Number(requestedCap) || snappedCapacity),
+    perStackCapacity: perStackCapacity,
+    snappedCapacity: snappedCapacity,
+    totalPower: totalPower,
+    selectedStackPrice: selectedStackPrice,
+    totalCost: totalCost,
+    label: phaseCount + "p · h" + stackHeight
+  };
+}
+
+function getModularConfig(capInput){
+  const phaseCount = getPhaseCount();
+  const requestedCap = Math.max(0, Number(capInput) || 0);
+  const baseCapacity = Math.max(0, Number(el.baseCapacity ? el.baseCapacity.value : 0) || 0);
+  const moduleCapacity = Math.max(0.01, Number(el.moduleCapacity ? el.moduleCapacity.value : 0.01) || 0.01);
+
+  const requestedPerStack = requestedCap / phaseCount;
+  let stackHeight = 1;
+  if (requestedPerStack > baseCapacity){
+    stackHeight = 1 + Math.ceil((requestedPerStack - baseCapacity) / moduleCapacity);
+  }
+  stackHeight = Math.max(1, Math.min(6, stackHeight));
+
+  return getModularConfigExplicit(phaseCount, stackHeight, requestedCap);
+}
+
 function batteryCostEUR(cap){
+  if (el.pricingModel && el.pricingModel.value === "modular"){
+    return getModularConfig(cap).totalCost;
+  }
+
   const t1 = Math.max(0, Number(el.tier1.value) || 0);
   const t2 = Math.max(0, Number(el.tier2.value) || 0);
   const t3 = Math.max(0, Number(el.tier3.value) || 0);
@@ -331,6 +516,63 @@ function batteryCostEUR(cap){
   cost += Math.min(Math.max(cap - 5, 0), 10) * t2;
   cost += Math.max(cap - 15, 0) * t3;
   return cost + fixed;
+}
+
+
+// ---------- pricing UI ----------
+function applyModularFamilyPreset(){
+  if (!el.modularFamily) return;
+  const fam = el.modularFamily.value;
+
+  const presetMap = {
+    custom: null,
+    zendure_solarflow_1600_ac_plus: { baseCapacity:2.4, moduleCapacity:1.92, baseUnitPower:1.6, prices:[969,1458,1947,2436,2925,3414] },
+    zendure_solarflow_2400_ac_plus: { baseCapacity:2.4, moduleCapacity:2.88, baseUnitPower:2.4, prices:[1918.29,2647.29,3376.29,4105.29,4834.29,5563.29] },
+    zendure_solarflow_2400_ac: { baseCapacity:0, moduleCapacity:2.88, baseUnitPower:2.4, prices:[1419,2239,3059,3879,4699,5519] },
+    zendure_hyper_2000: { baseCapacity:0, moduleCapacity:1.92, baseUnitPower:0.8, prices:[978,1467,1956,2445,2934,3423] },
+    zendure_hub_2000: { baseCapacity:0, moduleCapacity:1.92, baseUnitPower:0.8, prices:[888,1377,1866,2355,2844,3333] },
+    zendure_solarflow_800: { baseCapacity:0, moduleCapacity:1.92, baseUnitPower:0.8, prices:[738,1227,1716,2205,2694,3183] },
+    indevolt_powerflex_2000: { baseCapacity:2.0, moduleCapacity:2.0, baseUnitPower:2.4, prices:[650,1180,1710,2239,2769,3299] },
+    indevolt_solidflex_2000: { baseCapacity:1.8, moduleCapacity:1.8, baseUnitPower:2.4, prices:[518,1106,1694,2281,2869,3457] }
+  };
+
+  var p = customFamilyOverrides[fam] || presetMap[fam];
+  if (p){
+    if (el.baseCapacity) el.baseCapacity.value = String(p.baseCapacity);
+    if (el.moduleCapacity) el.moduleCapacity.value = String(p.moduleCapacity);
+    if (el.baseUnitPower) el.baseUnitPower.value = String(p.baseUnitPower);
+    if (el.accessoryCost && p.accessoryCost !== undefined) el.accessoryCost.value = String(p.accessoryCost);
+    if (el.batFixedCost && p.batFixedCost !== undefined) el.batFixedCost.value = String(p.batFixedCost);
+    if (el.pricesExVat && p.pricesExVat !== undefined) el.pricesExVat.checked = !!p.pricesExVat;
+    for (var i=1;i<=6;i++){
+      if (el["stackPrice"+i]) el["stackPrice"+i].value = String(p.prices[i-1]);
+    }
+  }
+  updatePricingUI();
+  updateFamilyPresetStatus();
+}
+
+function updatePricingUI(){
+  if (!el.pricingModel) return;
+
+  const modular = el.pricingModel.value === "modular";
+  if (el.tieredPricingBox) el.tieredPricingBox.style.display = modular ? "none" : "";
+  if (el.modularPricingBox) el.modularPricingBox.style.display = modular ? "" : "none";
+
+  if (modular && el.modularSummary){
+    const cfg = getModularConfig(Number(el.cap ? el.cap.value : 0) || 0);
+    el.modularSummary.innerHTML =
+      'Derived from current capacity input: stack height <b>' + cfg.stackHeight + '</b> per phase · ' +
+      '<b>' + cfg.phaseCount + '</b> base unit(s) · ' +
+      '<b>' + cfg.modules + '</b> extra module(s) total · ' +
+      'snapped capacity: <b>' + cfg.snappedCapacity.toFixed(2) + ' kWh</b> · ' +
+      'total power: <b>' + cfg.totalPower.toFixed(2) + ' kW</b> · ' +
+      'cost formula: <b>' + cfg.phaseCount + ' × ' + euro(cfg.selectedStackPrice) + '</b> + accessories + fixed' +
+      ((el.pricesExVat && el.pricesExVat.checked) ? ' <i>(excl. btw)</i>' : '') + ' · ' +
+      'system cost: <b>' + euro(cfg.totalCost) + '</b>';
+  } else if (el.modularSummary){
+    el.modularSummary.textContent = "";
+  }
 }
 
 // ---------- models ----------
@@ -837,7 +1079,7 @@ function simulateHybridCombined(all, netSeries, cfg, tariff){
 }
 
 // ---------- simulation wrapper ----------
-function runSimulationFor(capKwh, pmaxKw){
+function runSimulationFor(capKwh, pmaxKw, options){
   const all = buildHourlyAll();
   const { imp, exp, net } = buildSeriesForCosts(all);
 
@@ -845,6 +1087,14 @@ function runSimulationFor(capKwh, pmaxKw){
   const fixedFeedIn = Number(el.feedInFixed.value) || 0;
   const markup = Number(el.dynMarkup.value) || 0;
   const feedInDyn = Number(el.feedInDyn.value) || 0;
+
+  options = options || {};
+
+  if (el.pricingModel && el.pricingModel.value === "modular"){
+    const modularCfg = options.modularCfg ? options.modularCfg : getModularConfig(capKwh);
+    capKwh = modularCfg.snappedCapacity;
+    pmaxKw = modularCfg.totalPower;
+  }
 
   const cfg = {
     capKwh,
@@ -1267,6 +1517,9 @@ function render(){
   Plotly.newPlot("peakChart", [], {}, {responsive:true});
   el.notes.textContent = "";
   el.sweepInfo.textContent = "";
+  if (el.modularSweepPickerWrap) el.modularSweepPickerWrap.style.display = "none";
+  if (el.modularSweepPicker) el.modularSweepPicker.innerHTML = "";
+  lastModularSweepResults = [];
   lastRecommended = null;
   el.applyRecommended.disabled = true;
   el.generatePdfBtn.disabled = false;
@@ -1313,12 +1566,193 @@ function renderSingleSimulation(){
 
 // ---------- sweep ----------
 async function runSweepAndRecommend(){
+  const autoObj = el.autoObj.value;
+  const scaleYear = scaleToYear();
+  const tariff = Number(el.gridTariff ? el.gridTariff.value : 0) || 0;
+
+  const baseline = runSimulationFor(0, 0);
+  const baseFix = baseline.fixed0;
+  const baseDyn = baseline.dyn0Cost;
+
+  if (el.pricingModel && el.pricingModel.value === "modular"){
+    const configs = [];
+    for (let phase=1; phase<=3; phase++){
+      for (let h=1; h<=6; h++){
+        configs.push(getModularConfigExplicit(phase, h, 0));
+      }
+    }
+
+    const labels = configs.map(c => c.label);
+    const xVals = labels.slice();
+    const fixSavings = [];
+    const dynSavings = [];
+    const fixRoi = [];
+    const dynRoi = [];
+    const powers = [];
+    const heatRows = [[],[],[]];
+
+    let bestOverall = null;
+    const total = configs.length;
+
+    for (let i=0; i<configs.length; i++){
+      const cfgMod = configs[i];
+      const r = runSimulationFor(cfgMod.snappedCapacity, cfgMod.totalPower, { modularCfg: cfgMod });
+      const cost = cfgMod.totalCost;
+
+      const saveFix = baseFix - r.fixed1;
+      const annualFix = saveFix * scaleYear;
+      const roiFix = annualFix > 0 ? cost / annualFix : null;
+
+      let saveDyn = null, roiDyn = null;
+      if (dynPrices && baseDyn != null && r.dyn1Cost != null){
+        saveDyn = baseDyn - r.dyn1Cost;
+        const annualDyn = saveDyn * scaleYear;
+        roiDyn = annualDyn > 0 ? cost / annualDyn : null;
+      }
+
+      fixSavings.push(saveFix);
+      dynSavings.push(saveDyn);
+      fixRoi.push(roiFix);
+      dynRoi.push(roiDyn);
+      powers.push(cfgMod.totalPower);
+
+      let score = null;
+      if (autoObj === "save_fix") score = saveFix;
+      else if (autoObj === "roi_fix") score = roiFix != null ? -roiFix : null;
+      else if (autoObj === "save_dyn") score = saveDyn;
+      else if (autoObj === "roi_dyn") score = roiDyn != null ? -roiDyn : null;
+      else if (autoObj === "peak") score = calculateMonthlyPeakCost(baseline.timeline, tariff) - calculateMonthlyPeakCost(r.timeline, tariff);
+      else if (autoObj === "knee") score = saveDyn != null ? saveDyn : saveFix;
+
+      heatRows[cfgMod.phaseCount - 1].push(score);
+
+      if (score != null && (!bestOverall || score > bestOverall.score)){
+        bestOverall = {
+          score: score,
+          cap: cfgMod.snappedCapacity,
+          pmax: cfgMod.totalPower,
+          modularCfg: cfgMod,
+          fixSave: saveFix,
+          fixRoi: roiFix,
+          dynSave: saveDyn,
+          dynRoi: roiDyn
+        };
+      }
+
+      setProgress((i + 1) / total * 100, "Sweep " + (i + 1) + "/" + total);
+      if ((i + 1) % 2 === 0) await yieldToUI();
+    }
+
+    Plotly.newPlot("savingsChart", [
+      { x:xVals, y:fixSavings, type:"scatter", mode:"lines+markers", name:"Savings fixed" },
+      ...(dynPrices ? [{ x:xVals, y:dynSavings, type:"scatter", mode:"lines+markers", name:"Savings dynamic" }] : [])
+    ], {
+      margin:{t:10,r:10,b:80,l:55},
+      xaxis:{title:"Phase + stack height", tickangle:-30},
+      yaxis:{title:"Savings (€)"},
+      hovermode:"x unified"
+    }, {responsive:true});
+
+    Plotly.newPlot("roiChart", [
+      { x:xVals, y:fixRoi, type:"scatter", mode:"lines+markers", name:"ROI fixed" },
+      ...(dynPrices ? [{ x:xVals, y:dynRoi, type:"scatter", mode:"lines+markers", name:"ROI dynamic" }] : [])
+    ], {
+      margin:{t:10,r:10,b:80,l:55},
+      xaxis:{title:"Phase + stack height", tickangle:-30},
+      yaxis:{title:"ROI (years)"},
+      hovermode:"x unified"
+    }, {responsive:true});
+
+    Plotly.newPlot("powerChart", [
+      { x:xVals, y:powers, type:"scatter", mode:"lines+markers", name:"Derived power" }
+    ], {
+      margin:{t:10,r:10,b:80,l:55},
+      xaxis:{title:"Phase + stack height", tickangle:-30},
+      yaxis:{title:"Power (kW)"},
+      hovermode:"x unified"
+    }, {responsive:true});
+
+    Plotly.newPlot("optHeatmapChart", [{
+      x:[1,2,3,4,5,6],
+      y:["1 phase","2 phase","3 phase"],
+      z:heatRows,
+      type:"heatmap",
+      hovertemplate:"%{y}<br>Stack height %{x}<br>Score %{z:.2f}<extra></extra>"
+    }], {
+      margin:{t:30,r:10,b:40,l:80},
+      title:{text:"Modular sweep score", font:{size:12}},
+      xaxis:{title:"Stack height"},
+      yaxis:{title:"Phase setup"}
+    }, {responsive:true});
+
+    lastModularSweepResults = configs.map(function(cfgMod, i){
+      return {
+        label: cfgMod.label,
+        modularCfg: cfgMod,
+        fixSavings: fixSavings[i],
+        dynSavings: dynSavings[i],
+        fixRoi: fixRoi[i],
+        dynRoi: dynRoi[i],
+        power: powers[i]
+      };
+    });
+
+    if (el.modularSweepPicker && el.modularSweepPickerWrap){
+      el.modularSweepPicker.innerHTML = lastModularSweepResults.map(function(r, idx){
+        var dynTxt = r.dynSavings != null ? (" | dyn " + euro(r.dynSavings)) : "";
+        return '<option value="' + idx + '">' + r.label + ' | ' + r.modularCfg.snappedCapacity.toFixed(2) + ' kWh | ' + r.modularCfg.totalPower.toFixed(2) + ' kW | ' + euro(r.modularCfg.totalCost) + ' | fix ' + euro(r.fixSavings) + dynTxt + '</option>';
+      }).join("");
+      el.modularSweepPickerWrap.style.display = "";
+    }
+
+    if (!bestOverall){
+      lastRecommended = null;
+      el.applyRecommended.disabled = true;
+      el.sweepInfo.textContent = "Geen recommendation gevonden.";
+      return;
+    }
+
+    const rec = runSimulationFor(bestOverall.cap, bestOverall.pmax, { modularCfg: bestOverall.modularCfg });
+    const cost = bestOverall.modularCfg.totalCost;
+    const saveFix = rec.fixed0 - rec.fixed1;
+    const annualFix = saveFix * scaleYear;
+    const roiFix = annualFix > 0 ? cost / annualFix : null;
+    let saveDyn = null, annualDyn = null, roiDyn = null;
+    if (rec.dyn0Cost != null && rec.dyn1Cost != null){
+      saveDyn = rec.dyn0Cost - rec.dyn1Cost;
+      annualDyn = saveDyn * scaleYear;
+      roiDyn = annualDyn > 0 ? cost / annualDyn : null;
+    }
+
+    lastRecommended = {
+      cap: bestOverall.cap,
+      pmax: bestOverall.pmax,
+      modularCfg: bestOverall.modularCfg,
+      fix: { savings: saveFix, annual: annualFix, roi: roiFix },
+      dyn: { savings: saveDyn, annual: annualDyn, roi: roiDyn }
+    };
+
+    el.applyRecommended.disabled = false;
+    setProgress(100, "Sweep klaar");
+
+    el.sweepInfo.innerHTML = "Recommended modular setup: <b>" + bestOverall.modularCfg.phaseCount + " phase</b> · <b>stack height " + bestOverall.modularCfg.stackHeight + "</b><br>Capacity: <b>" + bestOverall.modularCfg.snappedCapacity.toFixed(2) + " kWh</b> · Power: <b>" + bestOverall.modularCfg.totalPower.toFixed(2) + " kW</b><br>You can also choose any swept modular configuration from the dropdown below.";
+
+    el.notes.innerHTML = '<div class="small">' +
+      '<b>Recommended modular setup</b>: ' + bestOverall.modularCfg.phaseCount + ' phase · stack height ' + bestOverall.modularCfg.stackHeight + '<br>' +
+      'Base units: <b>' + bestOverall.modularCfg.phaseCount + '</b> · extra modules total: <b>' + bestOverall.modularCfg.modules + '</b><br>' +
+      'Capacity: <b>' + bestOverall.modularCfg.snappedCapacity.toFixed(2) + ' kWh</b> · Power: <b>' + bestOverall.modularCfg.totalPower.toFixed(2) + ' kW</b><br>' +
+      'Cost formula: <b>' + bestOverall.modularCfg.phaseCount + ' × ' + euro(bestOverall.modularCfg.selectedStackPrice) + '</b> + accessories + fixed<br>' +
+      'Batterijkosten: <b>' + euro(cost) + '</b><br><br>' +
+      '<b>Fixed</b> — savings: ' + euro(saveFix) + ' · annual: ' + euro(annualFix) + ' · ROI: <b>' + (roiFix != null ? roiFix.toFixed(1) + ' years' : '—') + '</b><br>' +
+      '<b>Dynamic</b> — savings: ' + (saveDyn != null ? euro(saveDyn) : '—') + ' · annual: ' + (annualDyn != null ? euro(annualDyn) : '—') + ' · ROI: <b>' + (roiDyn != null ? roiDyn.toFixed(1) + ' years' : '—') + '</b>' +
+      '</div>';
+    return;
+  }
+
   const maxCap = Math.max(0, Number(el.sweepMaxCap.value) || 0);
   const stepCap = Math.max(0.5, Number(el.sweepStepCap.value) || 1);
   const maxKw = Math.max(0, Number(el.sweepMaxKw.value) || 0);
   const stepKw = Math.max(0.5, Number(el.sweepStepKw.value) || 1);
-  const autoObj = el.autoObj.value;
-  const scaleYear = scaleToYear();
 
   const caps = [];
   for (let c=0;c<=maxCap + 1e-9;c+=stepCap) caps.push(Math.round(c/stepCap)*stepCap);
@@ -1326,13 +1760,6 @@ async function runSweepAndRecommend(){
   for (let p=0;p<=maxKw + 1e-9;p+=stepKw) pows.push(Math.round(p/stepKw)*stepKw);
 
   if (!caps.length || !pows.length) return;
-
-  const baseline = runSimulationFor(0, 0);
-  const baseFix = baseline.fixed0;
-  const baseDyn = baseline.dyn0Cost;
-  const baseMetrics = computeBatteryMetrics(baseline.timeline, 0, Number(el.cycleLife?.value) || 6000);
-  const tariff = Number(el.gridTariff?.value) || 0;
-  const months = 12 / Math.max(1e-9, scaleToYear());
 
   const bestSavingsFix = [];
   const bestSavingsDyn = [];
@@ -1355,14 +1782,14 @@ async function runSweepAndRecommend(){
       const pmax = pows[pi];
       const r = runSimulationFor(cap, pmax);
       const cost = batteryCostEUR(cap);
-      const metrics = computeBatteryMetrics(r.timeline, cap, Number(el.cycleLife?.value) || 6000);
+      const metrics = computeBatteryMetrics(r.timeline, cap, Number(el.cycleLife ? el.cycleLife.value : 6000) || 6000);
 
       const saveFix = baseFix - r.fixed1;
       const annualFix = saveFix * scaleYear;
       const roiFix = annualFix > 0 ? cost / annualFix : null;
 
       if (saveFix > bestFix.savings){
-        bestFix = { savings: saveFix, roi: roiFix, pmax };
+        bestFix = { savings: saveFix, roi: roiFix, pmax: pmax };
       }
 
       if (dynPrices && baseDyn != null && r.dyn1Cost != null){
@@ -1371,7 +1798,7 @@ async function runSweepAndRecommend(){
         const roiDyn = annualDyn > 0 ? cost / annualDyn : null;
 
         if (saveDyn > bestDyn.savings){
-          bestDyn = { savings: saveDyn, roi: roiDyn, pmax };
+          bestDyn = { savings: saveDyn, roi: roiDyn, pmax: pmax };
         }
       }
 
@@ -1394,7 +1821,7 @@ async function runSweepAndRecommend(){
       scoreMatrix[pi][ci] = scoreForHeatmap;
 
       done++;
-      setProgress(done / total * 100, `Sweep ${done}/${total}`);
+      setProgress(done / total * 100, "Sweep " + done + "/" + total);
       if (done % 4 === 0) await yieldToUI();
     }
 
@@ -1413,17 +1840,17 @@ async function runSweepAndRecommend(){
     }
 
     let candidate = null;
-    if (autoObj === "roi_fix" && bestFix.roi != null) candidate = { score: -bestFix.roi, cap, pmax: bestFix.pmax };
-    if (autoObj === "save_fix") candidate = { score: bestFix.savings, cap, pmax: bestFix.pmax };
-    if (autoObj === "roi_dyn" && bestDyn.roi != null) candidate = { score: -bestDyn.roi, cap, pmax: bestDyn.pmax };
-    if (autoObj === "save_dyn" && dynPrices && bestDyn.savings != null) candidate = { score: bestDyn.savings, cap, pmax: bestDyn.pmax };
+    if (autoObj === "roi_fix" && bestFix.roi != null) candidate = { score: -bestFix.roi, cap: cap, pmax: bestFix.pmax };
+    if (autoObj === "save_fix") candidate = { score: bestFix.savings, cap: cap, pmax: bestFix.pmax };
+    if (autoObj === "roi_dyn" && bestDyn.roi != null) candidate = { score: -bestDyn.roi, cap: cap, pmax: bestDyn.pmax };
+    if (autoObj === "save_dyn" && dynPrices && bestDyn.savings != null) candidate = { score: bestDyn.savings, cap: cap, pmax: bestDyn.pmax };
     if (autoObj === "peak") {
       let bestPeak = { score:-Infinity, pmax:null };
       for (let pi=0; pi<pows.length; pi++) {
         const s = scoreMatrix[pi][ci];
         if (s != null && s > bestPeak.score) bestPeak = { score:s, pmax:pows[pi] };
       }
-      if (bestPeak.pmax != null) candidate = { score: bestPeak.score, cap, pmax: bestPeak.pmax };
+      if (bestPeak.pmax != null) candidate = { score: bestPeak.score, cap: cap, pmax: bestPeak.pmax };
     }
 
     if (candidate && (!bestOverall || candidate.score > bestOverall.score)){
@@ -1516,8 +1943,7 @@ async function runSweepAndRecommend(){
       <b>Recommended</b>: ${bestOverall.cap} kWh · ${bestOverall.pmax} kW<br>
       Batterijkosten: <b>${euro(cost)}</b><br><br>
       <b>Fixed</b> — savings: ${euro(saveFix)} · annual: ${euro(annualFix)} · ROI: <b>${roiFix != null ? roiFix.toFixed(1) + " years" : "—"}</b><br>
-      <b>Dynamic</b> — savings: ${saveDyn != null ? euro(saveDyn) : "—"} · annual: ${annualDyn != null ? euro(annualDyn) : "—"} · ROI: <b>${roiDyn != null ? roiDyn.toFixed(1) + " years" : "—"}</b><br>
-      <b>Grid tariff cost after</b>: <b>${euro(computeBatteryMetrics(rec.timeline, bestOverall.cap, Number(el.cycleLife?.value) || 6000).peakAfter * (Number(el.gridTariff?.value)||0) * (12 / Math.max(1e-9, scaleToYear())))}</b>
+      <b>Dynamic</b> — savings: ${saveDyn != null ? euro(saveDyn) : "—"} · annual: ${annualDyn != null ? euro(annualDyn) : "—"} · ROI: <b>${roiDyn != null ? roiDyn.toFixed(1) + " years" : "—"}</b>
       ${rec.dynMissing ? `<br><span class="warn">Missing price hours: ${rec.dynMissing}</span>` : ""}
     </div>
   `;
@@ -1725,8 +2151,15 @@ el.runSweep.addEventListener("click", async () => {
 
 el.applyRecommended.addEventListener("click", () => {
   if (!lastRecommended) return;
-  el.cap.value = lastRecommended.cap;
-  el.pmax.value = lastRecommended.pmax;
+  if (lastRecommended.modularCfg){
+    if (el.phaseSetup) el.phaseSetup.value = String(lastRecommended.modularCfg.phaseCount);
+    if (el.cap) el.cap.value = lastRecommended.modularCfg.snappedCapacity.toFixed(2);
+    if (el.pmax) el.pmax.value = lastRecommended.modularCfg.totalPower.toFixed(2);
+    updatePricingUI();
+  } else {
+    el.cap.value = lastRecommended.cap;
+    el.pmax.value = lastRecommended.pmax;
+  }
   renderSingleSimulation();
 });
 
@@ -1739,6 +2172,157 @@ el.generatePdfBtn.addEventListener("click", async ()=>{
 
 
 
+
+["pricingModel","modularFamily","phaseSetup","baseCapacity","baseUnitPower","moduleCapacity","accessoryCost","batFixedCost","stackPrice1","stackPrice2","stackPrice3","stackPrice4","stackPrice5","stackPrice6","cap","pricesExVat","tier1","tier2","tier3"].forEach(function(id){
+  if (el[id]){
+    el[id].addEventListener("change", function(){
+      if (id === "modularFamily") applyModularFamilyPreset();
+      updatePricingUI();
+      updateFamilyPresetStatus();
+    });
+    el[id].addEventListener("input", function(){
+      updatePricingUI();
+    });
+  }
+});
+
+if (el.applyModular){
+  el.applyModular.addEventListener("click", function(){
+    const cfg = getModularConfig(Number(el.cap ? el.cap.value : 0) || 0);
+    if (el.cap) el.cap.value = cfg.snappedCapacity.toFixed(2);
+    if (el.pmax) el.pmax.value = cfg.totalPower.toFixed(2);
+    updatePricingUI();
+  });
+}
+
+
+
+if (el.applySweepSelection){
+  el.applySweepSelection.addEventListener("click", function(){
+    if (!el.modularSweepPicker) return;
+    var idx = Number(el.modularSweepPicker.value);
+    var chosen = lastModularSweepResults[idx];
+    if (!chosen) return;
+
+    if (el.pricingModel) el.pricingModel.value = "modular";
+    if (el.phaseSetup) el.phaseSetup.value = String(chosen.modularCfg.phaseCount);
+    if (el.cap) el.cap.value = chosen.modularCfg.snappedCapacity.toFixed(2);
+    if (el.pmax) el.pmax.value = chosen.modularCfg.totalPower.toFixed(2);
+    updatePricingUI();
+    renderSingleSimulation();
+  });
+}
+
+if (el.updateFamilyPreset){
+  el.updateFamilyPreset.addEventListener("click", function(){
+    if (!el.modularFamily) return;
+    var fam = el.modularFamily.value;
+    if (!fam || fam === "custom"){
+      alert("Select a family preset first.");
+      return;
+    }
+    customFamilyOverrides[fam] = {
+      baseCapacity: Number(el.baseCapacity ? el.baseCapacity.value : 0) || 0,
+      moduleCapacity: Number(el.moduleCapacity ? el.moduleCapacity.value : 0) || 0,
+      baseUnitPower: Number(el.baseUnitPower ? el.baseUnitPower.value : 0) || 0,
+      accessoryCost: Number(el.accessoryCost ? el.accessoryCost.value : 0) || 0,
+      batFixedCost: Number(el.batFixedCost ? el.batFixedCost.value : 0) || 0,
+      pricesExVat: !!(el.pricesExVat && el.pricesExVat.checked),
+      prices: [
+        Number(el.stackPrice1 ? el.stackPrice1.value : 0) || 0,
+        Number(el.stackPrice2 ? el.stackPrice2.value : 0) || 0,
+        Number(el.stackPrice3 ? el.stackPrice3.value : 0) || 0,
+        Number(el.stackPrice4 ? el.stackPrice4.value : 0) || 0,
+        Number(el.stackPrice5 ? el.stackPrice5.value : 0) || 0,
+        Number(el.stackPrice6 ? el.stackPrice6.value : 0) || 0
+      ]
+    };
+    saveFamilyPresetOverrides();
+    updatePricingUI();
+    alert("Family preset updated and stored in this browser, including accessory / fixed cost and excl. btw setting.");
+  });
+}
+
+
+if (el.resetFamilyPreset){
+  el.resetFamilyPreset.addEventListener("click", function(){
+    if (!el.modularFamily) return;
+    var fam = el.modularFamily.value;
+    if (!fam || fam === "custom"){
+      alert("Select a family preset first.");
+      return;
+    }
+    deleteFamilyPresetOverride(fam);
+    applyModularFamilyPreset();
+    alert("Family preset reset to built-in default for this browser.");
+  });
+}
+
+if (el.exportFamilyPresets){
+  el.exportFamilyPresets.addEventListener("click", async function(){
+    var payload = {
+      version: 1,
+      exported_at: new Date().toISOString(),
+      presets: customFamilyOverrides
+    };
+    var jsonText = JSON.stringify(payload, null, 2);
+    try{
+      await saveFamilyPresetFile(jsonText, "energyui_family_presets.json");
+    }catch(e){
+      openFamilyPresetExportDialog("energyui_family_presets.json", payload);
+    }
+  });
+}
+
+if (el.importFamilyPresetsBtn && el.importFamilyPresetsFile){
+  el.importFamilyPresetsBtn.addEventListener("click", function(){
+    el.importFamilyPresetsFile.click();
+  });
+
+  el.importFamilyPresetsFile.addEventListener("change", async function(){
+    var f = el.importFamilyPresetsFile.files && el.importFamilyPresetsFile.files[0];
+    if (!f) return;
+    try{
+      var txt = await f.text();
+      var data = JSON.parse(txt);
+      var incoming = data && data.presets ? data.presets : data;
+      if (!incoming || typeof incoming !== "object") throw new Error("Invalid preset file");
+      customFamilyOverrides = Object.assign({}, customFamilyOverrides, incoming);
+      saveFamilyPresetOverrides();
+      applyModularFamilyPreset();
+      alert("Family presets imported successfully.");
+    }catch(e){
+      alert("Import failed: " + e.message);
+    }finally{
+      el.importFamilyPresetsFile.value = "";
+    }
+  });
+}
+
+
+if (el.copyFamilyPresetExport){
+  el.copyFamilyPresetExport.addEventListener("click", async function(){
+    const txt = el.familyPresetExportText ? el.familyPresetExportText.value : "";
+    try{
+      await navigator.clipboard.writeText(txt);
+      alert("Preset JSON copied.");
+    }catch(e){
+      window.prompt("Copy preset JSON:", txt);
+    }
+  });
+}
+
+if (el.closeFamilyPresetExport){
+  el.closeFamilyPresetExport.addEventListener("click", function(){
+    if (el.familyPresetExportDialog && typeof el.familyPresetExportDialog.close === "function"){
+      el.familyPresetExportDialog.close();
+    }
+  });
+}
+
 // init
+loadFamilyPresetOverrides();
+if (el.modularFamily) applyModularFamilyPreset();
+updatePricingUI();
 updatePriceUrl();
 setProgress(0, "");

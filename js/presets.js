@@ -3,6 +3,7 @@ document.addEventListener("DOMContentLoaded",()=>{
 
   const fields = [
     "fixedPrice","feedInFixed","dynMarkup","feedInDyn","batMode","cap","pmax","rte","soc0","socMin","cycleLife","gridTariff",
+    "pricingModel","modularFamily","phaseSetup","baseCapacity","baseUnitPower","moduleCapacity","accessoryCost","batFixedCost","stackPrice1","stackPrice2","stackPrice3","stackPrice4","stackPrice5","stackPrice6","pricesExVat",
     "tier1","tier2","tier3","batFixedCost",
     "sweepMaxCap","sweepStepCap","sweepMaxKw","sweepStepKw","autoObj","roiScale"
   ];
